@@ -1,6 +1,6 @@
 import unittest
 
-from Gardebot import greeter
+from gardebot import greeter
 
 
 class TestGreeter(unittest.TestCase):

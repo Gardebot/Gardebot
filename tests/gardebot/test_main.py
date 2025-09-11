@@ -4,7 +4,7 @@ import unittest.mock
 
 import numpy as np
 
-from Gardebot import main
+from gardebot import main
 
 
 class TestMain(unittest.TestCase):

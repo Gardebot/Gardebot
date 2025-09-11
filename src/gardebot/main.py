@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import numpy.typing as npt
 
-from Gardebot import greeter
+from gardebot import greeter
 
 LOGGER = logging.getLogger(__name__)
 

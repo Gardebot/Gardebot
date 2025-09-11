@@ -11,6 +11,9 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "~3.11"
 numpy = "~1.26"                                     # NumPy is the fundamental package for array computing with Python.
+flask = "^3.1.2"
+requests = "^2.32.5"
+dotenv = "^0.9.9"
 
 [tool.poetry.group.dev.dependencies]
 black = "~24"                                       # The uncompromising code formatter.
