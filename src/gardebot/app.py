@@ -1,6 +1,8 @@
 """Main Flask application for handling WAHA webhook events and providing an internal send_text helper."""
 
 # pylint: disable=broad-exception-caught
+from __future__ import annotations
+
 import logging
 
 from flask import Flask, Response, jsonify, request
@@ -12,7 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-WAHA_BASE_URL = str(API_CONFIG.get("base_url", "http://localhost:3000"))
+WAHA_BASE_URL = str(API_CONFIG.get("base_url", "http://waha:3000"))
 WAHA_SESSION = str(API_CONFIG.get("session", "default"))
 
 
@@ -31,23 +33,24 @@ def webhook() -> tuple[Response, int]:
 
     try:
         data = request.get_json(silent=True)
-        if not data:
+        if data is None:
             LOGGER.warning("Received empty or invalid JSON on /webhook")
             return jsonify({"status": "error", "message": "Invalid JSON"}), 400
 
+        LOGGER.debug("Raw webhook payload: %r", data)
         LOGGER.info("Webhook payload keys: %s", list(data.keys()))
 
-        if "messages" in data:
+        if "message" in data.get("event"):
             process_messages(data)
-        elif "statuses" in data:
+        if "statuses" in data:
             process_statuses(data)
         else:
-            LOGGER.info("Unhandled webhook data: %s", data)
+            LOGGER.info("Unhandled webhook data shape: %s", data)
 
         return jsonify({"status": "success"}), 200
     except Exception as exc:
-        LOGGER.error("Error processing webhook: %s", exc)
-        return jsonify({"status": "error", "message": str(exc)}), 200
+        LOGGER.exception("Error processing webhook: %s", exc)
+        return jsonify({"status": "error", "message": str(exc)}), 500
 
 
 if __name__ == "__main__":
