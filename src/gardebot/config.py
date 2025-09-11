@@ -8,7 +8,7 @@ load_dotenv()
 
 # API configuration
 API_CONFIG = {
-    "base_url": "http://waha:3000",
+    "base_url": "http://localhost:3000",
     "timeout": 10,  # Request timeout in seconds
     "retry_attempts": 3,
     "backoff_factor": 0.5,

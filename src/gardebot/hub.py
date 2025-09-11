@@ -1,6 +1,6 @@
 """Module to handle incoming messages and statuses from WAHA."""
 
-# pylint: disable=broad-exception-caught
+# pylint: disable=broad-exception-caught, protected-access
 import json
 import logging
 from typing import Any, Dict, List
@@ -16,13 +16,16 @@ def process_messages(data: Dict[str, Any]) -> None:
     """Process incoming messages from WAHA."""
     try:
         messages = data.get("messages", [])
+        if messages.empty():
+            LOGGER.info("No messages to process with data %s.", data)
+            return
         for message in messages:
             message_type = message.get("type")
             from_number = message.get("from")
             if message_type == "text":
                 text_content = message.get("text", {}).get("body", "")
                 LOGGER.info("Received text from %s : %s", from_number, text_content)
-                send_reply(from_number, f"Echoing: {text_content}")
+                send_text(from_number, f"Echoing: {text_content}")
             elif message_type == "image":
                 LOGGER.info("Received image from %s", from_number)
                 # Handle image processing here
@@ -76,41 +79,54 @@ def send_api_request(url: str, payload: Dict[str, Any]) -> requests.Response:
         return response
     except Exception as exc:
         LOGGER.error("Error sending API request: %s", exc)
-        return None
+        response = requests.Response()
+        response.status_code = 500  # Internal Server Error
+        response._content = json.dumps({"error": str(exc)}).encode("utf-8")
+        return response
 
 
 def send_poll(
-    to_number: str, poll_title: str, poll_options: List[str], poll_count: int
+    chat_id: str,
+    poll_title: str,
+    poll_options: List[str],
+    multiple_answers: bool = False,
 ) -> None:
     """Send a poll using WAHA."""
     try:
-        url = f"{API_CONFIG['base_url']}/messages/poll"
+        url = f"{API_CONFIG['base_url']}/api/sendPoll"
         payload = {
-            "to": to_number,
-            "options": poll_options,
-            "title": poll_title,
-            "count": poll_count,
+            "chatId": chat_id,
+            "poll": {
+                "name": poll_title,
+                "options": poll_options,
+                "multipleAnswers": multiple_answers,
+            },
+            "session": API_CONFIG["session"],
         }
 
         response = send_api_request(url, payload)
 
-        if response.status_code == 200:
-            LOGGER.info("Poll sent successfully to %s", to_number)
+        if response.status_code == 201:
+            LOGGER.info("Poll sent successfully to %s", chat_id)
         else:
             LOGGER.error("Failed to send poll: %s", response.text)
     except Exception as exc:
         LOGGER.error("Error sending poll: %s", exc)
 
 
-def send_reply(to_number: str, message_text: str) -> None:
+def send_text(chat_id: str, message_text: str) -> None:
     """Send a reply using WAHA."""
     try:
-        url = f"{API_CONFIG['base_url']}/messages/text"
+        url = f"{API_CONFIG['base_url']}/api/sendText"
 
-        payload = {"to": to_number, "body": message_text}
+        payload = {
+            "session": API_CONFIG["session"],
+            "chatId": chat_id,
+            "text": message_text,
+        }
         response = send_api_request(url, payload)
-        if response.status_code == 200:
-            LOGGER.info("Message sent successfully to %s", to_number)
+        if response.status_code == 201:
+            LOGGER.info("Message sent successfully to %s", chat_id)
         else:
             LOGGER.error("Failed to send message: %s", response.text)
     except Exception as exc:
