@@ -5,7 +5,7 @@ description = "Blueprint for a basic Python codebase"
 authors = ["Haefelin Julien <jhaefelin-git@aliasdesk.ch>"]
 repository = "https://github.com/Julien-hae/Gardebot.git"
 documentation = "https://github.com/Julien-hae/Gardebot/blob/master/README.md"
-packages = [{include = "Gardebot", from = "src"}]
+packages = [{include = "gardebot", from = "src"}]
 readme = "README.md"
 
 [tool.poetry.dependencies]
