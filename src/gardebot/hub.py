@@ -28,7 +28,7 @@ def process_messages(data: Dict[str, Any]) -> None:
 
             send_text(
                 chat_id=from_number,
-                message_text=f"Echoing : {body} sent at {timestamp}",
+                message_text=f"Echoing, you sent : '{body}' at {timestamp}",
             )
             LOGGER.info(
                 "Processed message from %s at %s: %s", from_number, timestamp, body

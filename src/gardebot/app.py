@@ -42,7 +42,7 @@ def webhook() -> tuple[Response, int]:
 
         if "message" in data.get("event"):
             process_messages(data)
-        if "statuses" in data:
+        elif "statuses" in data:
             process_statuses(data)
         else:
             LOGGER.info("Unhandled webhook data shape: %s", data)
