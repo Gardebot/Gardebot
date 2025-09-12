@@ -33,6 +33,10 @@ jobs:
         id: vars
         run: echo "VERSION=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
 
+      - name: Set lowercase owner
+        id: owner
+        run: echo "LOWERCASE_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
       - name: Build and push image
         uses: docker/build-push-action@v5
         with:
@@ -40,8 +44,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/gardebot:latest
-            ghcr.io/${{ github.repository_owner }}/gardebot:${{ steps.vars.outputs.VERSION }}
+            ghcr.io/${{ steps.owner.outputs.LOWERCASE_OWNER }}/gardebot:latest
+            ghcr.io/${{ steps.owner.outputs.LOWERCASE_OWNER }}/gardebot:${{ steps.vars.outputs.VERSION }}
           labels: |
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
