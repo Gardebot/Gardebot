@@ -1,4 +1,4 @@
-FROM python:3.11-slim as base
+FROM python:3.11-alpine as base
 
 ENV PYTHONFAULTHANDLER=1 \
   PYTHONUNBUFFERED=1 \
@@ -7,12 +7,10 @@ ENV PYTHONFAULTHANDLER=1 \
   PIP_DISABLE_PIP_VERSION_CHECK=on \
   PIP_DEFAULT_TIMEOUT=100
 
-# need to be root in order to install packages
 USER 0
-
-RUN apt-get update -y && \
-    apt-get install -y curl && \
-    apt-get upgrade -y
+RUN apk update && \
+    apk add curl && \
+    apk upgrade
 
 FROM base as builder
 
