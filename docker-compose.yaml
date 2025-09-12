@@ -19,7 +19,13 @@ services:
       - ./waha-data:/app/data
 
   gardebot:
-    build: .
+    image: ghcr.io/gardebot/gardebot:latest
+    build:
+      context: .
+      labels:
+        org.opencontainers.image.source: https://github.com/Gardebot/Gardebot
+        org.opencontainers.image.title: Gardebot
+        org.opencontainers.image.description: WhatsApp automation bot
     container_name: gardebot
     restart: unless-stopped
     depends_on:
