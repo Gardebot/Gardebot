@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   internal:
     driver: bridge
@@ -37,6 +35,23 @@ services:
       LOG_LEVEL: INFO
       WAHA_BASE_URL: http://waha:3000
       WAHA_SESSION: default
+      TEST_USER: /run/secrets/username
+      TEST_PWD: /run/secrets/password
     networks:
       - internal
+    volumes:
+      - secrets:/run/secrets
     command: ["python", "-m", "gardebot.app"]
+
+  secrets:
+    image: hashicorp/vault
+    volumes:
+      - secrets:/secrets
+    command: ["vault", "server", "-dev", "-dev-root-token-id=myroot"]
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK
+
+volumes:
+  secrets:
