@@ -8,7 +8,13 @@ import logging
 from flask import Flask, Response, jsonify, request
 
 from gardebot.config import API_CONFIG, SERVER_CONFIG
-from gardebot.hub import process_messages, process_statuses
+from gardebot.datamanager import DataManager
+from gardebot.hub import (
+    fetch_group_participants_table,
+    process_messages,
+    process_statuses,
+    process_vote,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +50,8 @@ def webhook() -> tuple[Response, int]:
             process_messages(data)
         elif "statuses" in data:
             process_statuses(data)
+        elif "poll.vote" in data.get("event"):
+            process_vote(data)
         else:
             LOGGER.info("Unhandled webhook data shape: %s", data)
 
@@ -59,3 +67,7 @@ if __name__ == "__main__":
         port=SERVER_CONFIG["port"],
         debug=SERVER_CONFIG["debug"],
     )
+
+    data_manager = DataManager()
+    df = fetch_group_participants_table(base_url="http://localhost:3000")
+    data_manager.save_dataframe(df, "group_participants")
