@@ -1,4 +1,4 @@
-FROM python:3.11-alpine as base
+FROM python:3.11-alpine AS base
 
 ENV PYTHONFAULTHANDLER=1 \
   PYTHONUNBUFFERED=1 \
@@ -7,12 +7,11 @@ ENV PYTHONFAULTHANDLER=1 \
   PIP_DISABLE_PIP_VERSION_CHECK=on \
   PIP_DEFAULT_TIMEOUT=100
 
-USER 0
 RUN apk update && \
-    apk add curl && \
+    apk add --no-cache curl bash ca-certificates gnupg shadow && \
     apk upgrade
 
-FROM base as builder
+FROM base AS builder
 
 ENV VENV_PATH="poetry_venv" \
     POETRY_VERSION="1.8.4" \
@@ -21,6 +20,9 @@ ENV VENV_PATH="poetry_venv" \
 
 RUN curl -sSL https://install.python-poetry.org | python - && \
     ln -s /root/.local/bin/poetry /usr/local/bin/poetry
+RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
+    echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
+    apk add doppler
 
 WORKDIR /app
 
@@ -36,11 +38,15 @@ FROM base AS final
 
 WORKDIR /app
 COPY src/ /app/src/
+RUN chown -R 1001:0 /app
 
 # switch back to a non-root user for executing
 USER 1001
 
 ENV PATH="/app/.venv/bin:$PATH"
+ENV HOME=/app
 COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /usr/bin/doppler /usr/bin/doppler
 
-CMD []
+ENTRYPOINT ["doppler", "run", "--config-dir", "/app/.doppler", "--"]
+CMD ["python", "-m", "gardebot.app"]

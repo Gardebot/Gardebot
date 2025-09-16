@@ -32,4 +32,6 @@
 **/secrets.dev.yaml
 **/values.dev.yaml
 LICENSE
-credentials.env
+*.env
+*.txt
+credentials/
