@@ -60,7 +60,10 @@ def process_statuses(data: Dict[str, Any]) -> None:
 def send_post_request(url: str, payload: Dict[str, Any]) -> requests.Response:
     """Send a generic API POST request to WAHA."""
     try:
-        headers = {"Content-Type": "application/json"}
+        headers = {
+            "Content-Type": "application/json",
+            "X-Api-Key": API_CONFIG["api_key"],
+        }
         LOGGER.debug("POST %s payload=%s", url, payload)
         response = requests.post(
             url,
@@ -78,10 +81,13 @@ def send_post_request(url: str, payload: Dict[str, Any]) -> requests.Response:
 def send_get_request(
     url: str,
     params: Optional[Dict[str, Any]] = None,
-    headers: Dict[str, str] = {"Accept": "application/json"},
 ) -> requests.Response:
     """Send a generic API GET request to WAHA."""
     try:
+        headers = {
+            "Content-Type": "application/json",
+            "X-Api-Key": API_CONFIG["api_key"],
+        }
         LOGGER.debug("GET %s", url)
         response = requests.get(
             url,

@@ -15,17 +15,21 @@ services:
       WAHA_START_SESSION: default
       WAHA_LOG_LEVEL: info
       WHATSAPP_HOOK_EVENTS: message
+    env_file:
+      - credentials_waha.env
     ports:
       - "3000:3000"
     networks:
       - internal
 
   gardebot:
-    image: ghcr.io/gardebot/gardebot:latest
     build:
       context: .
+    image: ghcr.io/gardebot/gardebot:latest   # build will override if local
     container_name: gardebot
     restart: unless-stopped
+    env_file:
+      - credentials.env
     depends_on:
       - waha
     environment:
@@ -35,9 +39,6 @@ services:
       LOG_LEVEL: INFO
       WAHA_BASE_URL: http://waha:3000
       WAHA_SESSION: default
+    command: ["doppler", "run", "--", "python", "-m", "gardebot.app"]
     networks:
       - internal
-    command: ["python", "-m", "gardebot.app"]
-secrets:
-  my_secret:
-    file: ./my_secret.txt
