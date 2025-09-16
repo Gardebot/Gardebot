@@ -7,11 +7,32 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+import pandas as pd  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 
 from gardebot.config import API_CONFIG, GROUP_ID_GARDE_ET_PIQUET
 
 LOGGER = logging.getLogger(__name__)
+
+
+def process_vote(data: Dict[str, Any]) -> None:
+    """Process incoming poll votes from WAHA."""
+    try:
+        payload = data.get("payload")
+        if payload is None:
+            LOGGER.info("No payload to process with data %s.", data)
+            return
+        voter = payload.get("voter")
+        poll_id = payload.get("pollId")
+        selected_options = payload.get("selectedOptions", [])
+        LOGGER.info(
+            "Processed vote from %s on poll %s: %s",
+            voter,
+            poll_id,
+            selected_options,
+        )
+    except Exception as exc:
+        LOGGER.exception("Error in process_vote: %s", exc)
 
 
 def process_messages(data: Dict[str, Any]) -> None:
@@ -273,3 +294,35 @@ def get_contact_info(
     except Exception as exc:
         LOGGER.exception("Error fetching contact info: %s", exc)
         return None
+
+
+def fetch_group_participants_table(
+    base_url: str = API_CONFIG["base_url"],
+    session: str = API_CONFIG["session"],
+    groups_id: str = GROUP_ID_GARDE_ET_PIQUET,
+) -> pd.DataFrame:
+    """Fetch and format a table of group participants with contact info.
+
+    Args:
+        base_url: Base URL of the WAHA API
+        session: Session identifier
+        groups_id: Unique identifier of the group
+    Returns:
+        DataFrame of participant contact information
+    """
+    group_participants = get_group_participants(
+        base_url=base_url, session=session, group_id=groups_id
+    )
+    if group_participants is None:
+        LOGGER.error("No participants found for group %s", groups_id)
+        return pd.DataFrame()
+    contact_id_list = [
+        "".join([char for char in contact_data["PhoneNumber"] if char.isnumeric()])
+        for contact_data in group_participants
+    ]
+    contact_info_list = [
+        get_contact_info(contact_id=contact_id, base_url=base_url, session=session)
+        for contact_id in contact_id_list
+    ]
+
+    return pd.DataFrame(contact_info_list)
