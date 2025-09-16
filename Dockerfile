@@ -8,7 +8,7 @@ ENV PYTHONFAULTHANDLER=1 \
   PIP_DEFAULT_TIMEOUT=100
 
 RUN apk update && \
-    apk add --no-cache curl bash ca-certificates gnupg shadow && \
+    apk add --no-cache bash ca-certificates curl gnupg shadow && \
     apk upgrade
 
 FROM base AS builder
@@ -20,8 +20,8 @@ ENV VENV_PATH="poetry_venv" \
 
 RUN curl -sSL https://install.python-poetry.org | python - && \
     ln -s /root/.local/bin/poetry /usr/local/bin/poetry
-RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
-    echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
+ADD https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub
+RUN echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
     apk add doppler
 
 WORKDIR /app
