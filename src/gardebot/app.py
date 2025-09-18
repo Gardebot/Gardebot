@@ -9,12 +9,8 @@ from flask import Flask, Response, jsonify, request
 
 from gardebot.config import API_CONFIG, SERVER_CONFIG
 from gardebot.datamanager import DataManager
-from gardebot.hub import (
-    fetch_group_participants_table,
-    process_messages,
-    process_statuses,
-    process_vote,
-)
+from gardebot.gardebot import Gardebot
+from gardebot.group import GroupRequest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +29,7 @@ def health_check() -> tuple[Response, int]:
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook() -> tuple[Response, int]:
     """Handle incoming webhook events from WAHA (messages / statuses)."""
+    gardebot = Gardebot()
     if request.method == "GET":
         LOGGER.info("Received verification/ping request on /webhook")
         return jsonify({"status": "ok"}), 200
@@ -47,11 +44,9 @@ def webhook() -> tuple[Response, int]:
         LOGGER.info("Webhook payload keys: %s", list(data.keys()))
 
         if "message" in data.get("event"):
-            process_messages(data)
-        elif "statuses" in data:
-            process_statuses(data)
+            gardebot.process_messages(data)
         elif "poll.vote" in data.get("event"):
-            process_vote(data)
+            gardebot.process_vote(data)
         else:
             LOGGER.info("Unhandled webhook data shape: %s", data)
 
@@ -68,6 +63,7 @@ if __name__ == "__main__":
         debug=SERVER_CONFIG["debug"],
     )
 
+    group_hub = GroupRequest()
     data_manager = DataManager()
-    df = fetch_group_participants_table(base_url="http://localhost:3000")
+    df = group_hub.fetch_group_participants_table()
     data_manager.save_dataframe(df, "group_participants")
