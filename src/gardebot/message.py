@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
+from gardebot.config import API_CONFIG
 from gardebot.request import WahaRequest
 
 LOGGER = logging.getLogger(__name__)
@@ -14,9 +15,9 @@ LOGGER = logging.getLogger(__name__)
 class MessageRequest(WahaRequest):
     """Handles message interactions with the WAHA API."""
 
-    def __init__(self) -> None:
+    def __init__(self, base_url: str = API_CONFIG["base_url"]) -> None:
         """Initialize the MessageRequest instance."""
-        super().__init__()
+        super().__init__(base_url=base_url)
 
     def process_messages(self, data: Dict[str, Any]) -> None:
         """Process incoming messages from WAHA."""

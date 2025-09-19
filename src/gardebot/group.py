@@ -8,8 +8,9 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
 
-from gardebot.config import GROUP_ID_GARDE_ET_PIQUET
+from gardebot.config import API_CONFIG, GROUP_ID_GARDE_ET_PIQUET
 from gardebot.contact import ContactRequest
+from gardebot.datamanager import DataManager
 from gardebot.request import WahaRequest
 
 LOGGER = logging.getLogger(__name__)
@@ -18,9 +19,13 @@ LOGGER = logging.getLogger(__name__)
 class GroupRequest(WahaRequest):
     """Handles group interactions with the WAHA API."""
 
-    def __init__(self, group_id: str = GROUP_ID_GARDE_ET_PIQUET) -> None:
+    def __init__(
+        self,
+        base_url: str = API_CONFIG["base_url"],
+        group_id: str = GROUP_ID_GARDE_ET_PIQUET,
+    ) -> None:
         """Initialize with a specific group ID."""
-        super().__init__()
+        super().__init__(base_url=base_url)
         self.group_id = group_id
 
     def get_group_participants(
@@ -111,11 +116,54 @@ class GroupRequest(WahaRequest):
 
         contact_info_list = []
         for contact_id in contact_id_list:
-            contact_request = ContactRequest()
+            contact_request = ContactRequest(base_url=self.base_url)
             contact_info = contact_request.get_contact_info(contact_id=contact_id)
             if contact_info is None:
                 LOGGER.warning("No contact info found for contact %s", contact_id)
             else:
                 contact_info_list.append(contact_info)
+        df = pd.DataFrame(contact_info_list)
+        df["phone"] = df["id"].str.extract(r"(\d+)")[0].apply(lambda s: "+" + s)
+        df["joined_date"] = pd.Timestamp.now(tz="Europe/Zurich")
+        df["group_id"] = self.group_id
 
-        return pd.DataFrame(contact_info_list)
+        return df
+
+    def sync_whatsapp_group_participants(
+        self,
+    ) -> None:
+        """Fetch and format a table of group participants with contact info."""
+        data_manager = DataManager()
+        actual_participants_df = self.fetch_group_participants_table()
+        participants_in_database_df = data_manager.load_dataframe("group_participants")
+        if participants_in_database_df.empty:
+            LOGGER.info(
+                "No existing participants in database. Saved current participants."
+            )
+            data_manager.save_dataframe(actual_participants_df, "group_participants")
+            return None
+
+        if actual_participants_df["id"].equals(participants_in_database_df["id"]):
+            LOGGER.debug("No changes in group %s participants.", self.group_id)
+            return None
+
+        left_group_mask = ~participants_in_database_df["id"].isin(
+            actual_participants_df["id"]
+        )
+        join_group_mask = ~actual_participants_df["id"].isin(
+            participants_in_database_df["id"]
+        )
+        new_members = actual_participants_df[join_group_mask]
+        if join_group_mask.any():
+            LOGGER.info(
+                "Members who joined the group %s: %s",
+                self.group_id,
+                new_members[["id", "name", "phone"]].to_dict(orient="records"),
+            )
+
+        updated_df = pd.concat(
+            [participants_in_database_df[~left_group_mask], new_members],
+            ignore_index=True,
+        )
+        data_manager.save_dataframe(updated_df, "group_participants")
+        return None
