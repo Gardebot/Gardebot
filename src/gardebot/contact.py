@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
+from gardebot.config import API_CONFIG
 from gardebot.request import WahaRequest
 
 LOGGER = logging.getLogger(__name__)
@@ -14,9 +15,9 @@ LOGGER = logging.getLogger(__name__)
 class ContactRequest(WahaRequest):
     """Handles contact interactions with the WAHA API."""
 
-    def __init__(self) -> None:
+    def __init__(self, base_url: str = API_CONFIG["base_url"]) -> None:
         """Initialize with a specific contact ID."""
-        super().__init__()
+        super().__init__(base_url=base_url)
 
     def get_contact_info(self, contact_id: str) -> Optional[Dict[str, Any]]:
         """Fetch contact information from the WAHA API.
@@ -28,7 +29,7 @@ class ContactRequest(WahaRequest):
         try:
             response = self.send_get_request(endpoint=endpoint)
             if self._is_success(response.status_code):
-                LOGGER.info(
+                LOGGER.debug(
                     "Contact info fetched successfully for contact %s", contact_id
                 )
                 contact_info: Dict[str, Any] = response.json()

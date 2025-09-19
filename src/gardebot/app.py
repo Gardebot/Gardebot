@@ -4,11 +4,11 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from flask import Flask, Response, jsonify, request
 
 from gardebot.config import API_CONFIG, SERVER_CONFIG
-from gardebot.datamanager import DataManager
 from gardebot.gardebot import Gardebot
 
 LOGGER = logging.getLogger(__name__)
@@ -48,12 +48,12 @@ def webhook() -> tuple[Response, int]:
             gardebot.process_vote(data)
         elif "session.status" in data.get("event"):
             if "WORKING" in data.get("payload").get("status"):
-                LOGGER.info("Session is now WORKING")
-                data_manager = DataManager()
-                df = gardebot.fetch_group_participants_table()
-                data_manager.save_dataframe(df, "group_participants")
+                LOGGER.info("Session is now WORKING, synching participants in 60s.")
+                threading.Timer(
+                    60, gardebot.sync_whatsapp_group_participants
+                ).start()  # whatsapp need time to load data
             else:
-                LOGGER.info(
+                LOGGER.debug(
                     "Session status changed: %s", data.get("payload").get("status")
                 )
 

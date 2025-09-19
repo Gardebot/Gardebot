@@ -22,18 +22,30 @@ class DataManager(ABC):
             if os.environ.get(var) is None:
                 raise ValueError(f"{var} environment variable not set")
 
-    # @abstractmethod
-    # def load_dataframe(self, filename: str) -> pd.DataFrame:
-    #     """Load a dataframe from a file or create a new one if not found.
+    def load_dataframe(self, filename: str) -> pd.DataFrame:
+        """Load the Sapeur dataframe from file or create it if not found."""
+        if not filename.endswith(".parquet"):
+            filename = f"{filename.split('.')[0]}.parquet"
+        file_url = self.generate_file_url(filename)
+        response = requests.get(
+            file_url,
+            auth=(
+                os.environ.get("KDRIVE_USER"),
+                os.environ.get("KDRIVE_PWD"),
+            ),  # pyright: ignore[reportArgumentType]
+            timeout=200,
+        )
 
-    #     This method must be implemented by subclasses.
+        if response.status_code != 200:
+            LOGGER.warning(
+                "File %s not found. Creating a new empty DataFrame.", filename
+            )
+            df = pd.DataFrame()
+        else:
+            df = pd.read_parquet(io.BytesIO(response.content))
+            LOGGER.info("File %s found. Loading it into a DataFrame.", filename)
 
-    #     Args:
-    #         filename (str): Name of the file to load.
-
-    #     Returns:
-    #         pd.DataFrame: The loaded DataFrame.
-    #     """
+        return df
 
     def generate_file_url(self, filename: str) -> str:
         """Generate the file URL for Kdrive."""
@@ -41,13 +53,14 @@ class DataManager(ABC):
         folder = os.environ.get("KDRIVE_FOLDER")
 
         file_path = os.path.join(folder, filename)  # type: ignore
-        LOGGER.info("Using File path: %s", file_path)
+        LOGGER.debug("Using File path: %s", file_path)
         folder_url = f"https://{k_id}.connect.kdrive.infomaniak.com/remote.php/webdav/Common%20documents/"
         file_url = os.path.join(folder_url, file_path).replace(" ", "%20")
         return file_url
 
     def save_dataframe(self, df: pd.DataFrame, filename: str) -> None:
         """Save the calendar dataframe as CSV and Parquet in Kdrive."""
+        LOGGER.info("Saving DataFrame to Kdrive as CSV and Parquet: %s", filename)
         self.save_dataframe_as_csv(df, filename)
         self.save_dataframe_as_parquet(df, filename)
 
@@ -98,7 +111,9 @@ class DataManager(ABC):
         file_url = self.generate_file_url(filename)
         LOGGER.debug("Saving DataFrame to Kdrive as %s", filename)
 
-        csv_data = df.to_csv(index=True, encoding="utf-8", sep="\t")
+        csv_data = df.replace(",", ";", regex=True).to_csv(
+            index=True, encoding="utf-8", sep=","
+        )
         response = requests.put(
             file_url,
             data=csv_data,

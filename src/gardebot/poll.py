@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
+from gardebot.config import API_CONFIG
 from gardebot.request import WahaRequest
 
 LOGGER = logging.getLogger(__name__)
@@ -14,11 +15,9 @@ LOGGER = logging.getLogger(__name__)
 class PollRequest(WahaRequest):
     """Handles poll interactions with the WAHA API."""
 
-    def __init__(
-        self,
-    ) -> None:
+    def __init__(self, base_url: str = API_CONFIG["base_url"]) -> None:
         """Initialize the PollRequest instance."""
-        super().__init__()
+        super().__init__(base_url=base_url)
 
     def process_vote(self, data: Dict[str, Any]) -> None:
         """Process incoming poll votes from WAHA."""
