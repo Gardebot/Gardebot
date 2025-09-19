@@ -33,7 +33,7 @@ API_CONFIG: ApiConfigType = {
     "retry_attempts": 3,
     "backoff_factor": 0.5,
     "session": "default",
-    "api_key": _load_secret("WAHA_API_KEY"),
+    "api_key": _load_secret("API_KEY"),
 }
 
 GROUP_ID_GARDE_ET_PIQUET = "120363402596282813@g.us"

@@ -14,31 +14,28 @@ LOGGER = logging.getLogger(__name__)
 class ContactRequest(WahaRequest):
     """Handles contact interactions with the WAHA API."""
 
-    def __init__(self, contact_id: str) -> None:
+    def __init__(self) -> None:
         """Initialize with a specific contact ID."""
         super().__init__()
-        self.contact_id = contact_id
 
-    def get_contact_info(
-        self,
-    ) -> Optional[Dict[str, Any]]:
+    def get_contact_info(self, contact_id: str) -> Optional[Dict[str, Any]]:
         """Fetch contact information from the WAHA API.
 
         Returns:
             Dictionary of contact information
         """
-        endpoint = f"/api/contacts?contactId={self.contact_id}&session={self.session}"
+        endpoint = f"/api/contacts?contactId={contact_id}&session={self.session}"
         try:
             response = self.send_get_request(endpoint=endpoint)
             if self._is_success(response.status_code):
                 LOGGER.info(
-                    "Contact info fetched successfully for contact %s", self.contact_id
+                    "Contact info fetched successfully for contact %s", contact_id
                 )
                 contact_info: Dict[str, Any] = response.json()
                 return contact_info
             LOGGER.error(
                 "Failed to fetch contact info for contactId %s (%s): %s",
-                self.contact_id,
+                contact_id,
                 response.status_code,
                 response.text,
             )

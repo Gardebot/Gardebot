@@ -111,8 +111,8 @@ class GroupRequest(WahaRequest):
 
         contact_info_list = []
         for contact_id in contact_id_list:
-            contact_request = ContactRequest(contact_id=contact_id)
-            contact_info = contact_request.get_contact_info()
+            contact_request = ContactRequest()
+            contact_info = contact_request.get_contact_info(contact_id=contact_id)
             if contact_info is None:
                 LOGGER.warning("No contact info found for contact %s", contact_id)
             else:
