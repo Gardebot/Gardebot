@@ -22,4 +22,4 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         GroupRequest.__init__(self, group_id=group_id)
         MessageRequest.__init__(self)
         PollRequest.__init__(self)
-        ContactRequest.__init__(self, contact_id="")  # Placeholder contact_id
+        ContactRequest.__init__(self)
