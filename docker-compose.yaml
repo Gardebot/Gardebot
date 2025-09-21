@@ -14,7 +14,7 @@ services:
       WHATSAPP_HOOK_URL: http://gardebot:5000/webhook
       WAHA_START_SESSION: default
       WAHA_LOG_LEVEL: info
-      WHATSAPP_HOOK_EVENTS: message,poll.vote,session.status
+      WHATSAPP_HOOK_EVENTS: message,poll.vote,session.status,group.v2.participants
     env_file:
       - credentials_waha.env
     ports:

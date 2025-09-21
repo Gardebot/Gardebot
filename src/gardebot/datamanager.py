@@ -21,17 +21,21 @@ class DataManager(ABC):
         for var in ["KDRIVE_USER", "KDRIVE_PWD", "KDRIVE_ID", "KDRIVE_FOLDER"]:
             if os.environ.get(var) is None:
                 raise ValueError(f"{var} environment variable not set")
+        self.kdrive_id = os.environ.get("KDRIVE_ID")
+        self.kdrive_folder = os.environ.get("KDRIVE_FOLDER")
+        self.kdrive_user = os.environ.get("KDRIVE_USER")
+        self.kdrive_pwd = os.environ.get("KDRIVE_PWD")
 
     def load_dataframe(self, filename: str) -> pd.DataFrame:
-        """Load the Sapeur dataframe from file or create it if not found."""
+        """Load the dataframe from file or create it if not found."""
         if not filename.endswith(".parquet"):
             filename = f"{filename.split('.')[0]}.parquet"
         file_url = self.generate_file_url(filename)
         response = requests.get(
             file_url,
             auth=(
-                os.environ.get("KDRIVE_USER"),
-                os.environ.get("KDRIVE_PWD"),
+                self.kdrive_user,
+                self.kdrive_pwd,
             ),  # pyright: ignore[reportArgumentType]
             timeout=200,
         )
@@ -49,20 +53,20 @@ class DataManager(ABC):
 
     def generate_file_url(self, filename: str) -> str:
         """Generate the file URL for Kdrive."""
-        k_id = os.environ.get("KDRIVE_ID")
-        folder = os.environ.get("KDRIVE_FOLDER")
-
-        file_path = os.path.join(folder, filename)  # type: ignore
+        file_path = os.path.join(self.kdrive_folder, filename)  # type: ignore
         LOGGER.debug("Using File path: %s", file_path)
-        folder_url = f"https://{k_id}.connect.kdrive.infomaniak.com/remote.php/webdav/Common%20documents/"
+        folder_url = f"https://{self.kdrive_id}.connect.kdrive.infomaniak.com/remote.php/webdav/Common%20documents/"
         file_url = os.path.join(folder_url, file_path).replace(" ", "%20")
         return file_url
 
     def save_dataframe(self, df: pd.DataFrame, filename: str) -> None:
         """Save the calendar dataframe as CSV and Parquet in Kdrive."""
         LOGGER.info("Saving DataFrame to Kdrive as CSV and Parquet: %s", filename)
-        self.save_dataframe_as_csv(df, filename)
         self.save_dataframe_as_parquet(df, filename)
+        try:
+            self.save_dataframe_as_csv(df, filename)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            LOGGER.exception("Error saving DataFrame as CSV %s: %s", filename, exc)
 
     def save_dataframe_as_parquet(self, df: pd.DataFrame, filename: str) -> None:
         """Save a dataframe as Parquet in Kdrive for data consistency.
@@ -84,8 +88,8 @@ class DataManager(ABC):
             file_url,
             data=parquet_data,
             auth=(
-                os.environ.get("KDRIVE_USER"),
-                os.environ.get("KDRIVE_PWD"),
+                self.kdrive_user,
+                self.kdrive_pwd,
             ),  # pyright: ignore[reportArgumentType]
             headers={"Content-Type": "application/octet-stream"},
             timeout=200,
@@ -118,8 +122,8 @@ class DataManager(ABC):
             file_url,
             data=csv_data,
             auth=(
-                os.environ.get("KDRIVE_USER"),
-                os.environ.get("KDRIVE_PWD"),
+                self.kdrive_user,
+                self.kdrive_pwd,
             ),  # pyright: ignore[reportArgumentType]
             headers={"Content-Type": "text/csv; charset=utf-8; delimiter=;"},
             timeout=200,

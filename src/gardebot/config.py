@@ -45,11 +45,21 @@ class ServerConfigType(TypedDict):
     host: str
     port: int
     debug: bool
+    postpone_sync_time: int
 
 
 SERVER_CONFIG: ServerConfigType = {
     "host": "0.0.0.0",
     "port": 5000,
     "debug": False,
-    # other config values...
+    "postpone_sync_time": 60,  # Postpone sync of group participants on startup (to allow WAHA to be ready)
 }
+
+
+class Effectif(TypedDict):
+    """TypedDict for server configuration."""
+
+    sapeur: int
+    responsable: int
+    chauffeur: int
+    pr: int

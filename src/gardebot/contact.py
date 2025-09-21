@@ -33,6 +33,9 @@ class ContactRequest(WahaRequest):
                     "Contact info fetched successfully for contact %s", contact_id
                 )
                 contact_info: Dict[str, Any] = response.json()
+                contact_info["phone"] = "+" + "".join(
+                    [a for a in contact_id if a.isdigit()]
+                )  # Quick fix to add phone number
                 return contact_info
             LOGGER.error(
                 "Failed to fetch contact info for contactId %s (%s): %s",
