@@ -57,9 +57,9 @@ SERVER_CONFIG: ServerConfigType = {
 
 
 class Effectif(TypedDict):
-    """TypedDict for server configuration."""
+    """TypedDict for effectif configuration."""
 
-    sapeur: int
+    spv: int
     responsable: int
     chauffeur: int
     pr: int

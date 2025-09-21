@@ -136,11 +136,10 @@ class InfomaniakCalendar(DataManager):
             )
             df = self.fetch_raw_calendar_data()
         df = self._handle_duplicate_names(df)
-        payload_parsed = df["payload"].apply(self._parse_payload)
-
-        df = df.join(pd.json_normalize(payload_parsed)).drop(
-            columns=["payload"]
-        )  # pyright: ignore[reportArgumentType]
+        df_effectif = (
+            df["payload"].map(self._parse_payload).apply(pd.Series).astype(int)
+        )
+        df = df.join(df_effectif)
         df = self._remove_na(df)
 
         return df
