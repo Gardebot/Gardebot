@@ -55,11 +55,29 @@ SERVER_CONFIG: ServerConfigType = {
     "postpone_sync_time": 60,  # Postpone sync of group participants on startup (to allow WAHA to be ready)
 }
 
+MONTHS_FR = {
+    1: "janvier",
+    2: "février",
+    3: "mars",
+    4: "avril",
+    5: "mai",
+    6: "juin",
+    7: "juillet",
+    8: "août",
+    9: "septembre",
+    10: "octobre",
+    11: "novembre",
+    12: "décembre",
+}
 
-class Effectif(TypedDict):
-    """TypedDict for effectif configuration."""
+WEEKDAYS_FR = {
+    0: "lundi",
+    1: "mardi",
+    2: "mercredi",
+    3: "jeudi",
+    4: "vendredi",
+    5: "samedi",
+    6: "dimanche",
+}
 
-    spv: int
-    responsable: int
-    chauffeur: int
-    pr: int
+TIME_BEFORE_PUBLICATION_DAY = 21
