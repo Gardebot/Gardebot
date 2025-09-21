@@ -11,7 +11,7 @@ from gardebot.config import API_CONFIG, GROUP_ID_GARDE_ET_PIQUET, SERVER_CONFIG
 from gardebot.contact import ContactRequest
 from gardebot.group import GroupRequest
 from gardebot.message import MessageRequest
-from gardebot.poll import PollRequest
+from gardebot.poll import PollManager, PollRequest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,3 +41,5 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         ).start()  # whatsapp need time to load data
         cal = InfomaniakCalendar()
         cal.sync_calendar_events()
+        poll_manager = PollManager()
+        poll_manager.synch_poll_table()

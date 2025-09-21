@@ -3,15 +3,12 @@
 import hashlib
 import logging
 import os
-import re
-from typing import Dict
 
 import pandas as pd  # type: ignore[import-untyped]
 import pytz  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 from icalendar import Calendar  # type: ignore[import-untyped]
 
-from gardebot.config import Effectif
 from gardebot.datamanager import DataManager
 
 LOGGER = logging.getLogger(__name__)
@@ -108,19 +105,6 @@ class InfomaniakCalendar(DataManager):
         uid = hashlib.sha256(unique_string.encode()).hexdigest()
         return uid
 
-    def _parse_payload(self, s: str) -> Dict[str, int]:
-        """Parse the payload string to extract effectif information."""
-        parser = re.compile(r"([A-Za-zÀ-ÖØ-öø-ÿ_]+)\s*:\s*([+-]?\d+)")
-        effectif_keys = tuple(Effectif.__annotations__.keys())
-
-        result: Dict[str, int] = dict.fromkeys(effectif_keys, 0)
-        pairs = parser.findall(s)
-        mapping = {k.strip().lower(): int(v) for k, v in pairs}
-
-        for k in effectif_keys:
-            result[k] = int(mapping.get(k, 0))
-        return result
-
     def convert_raw_to_fnd(self, df: pd.DataFrame = pd.DataFrame()) -> pd.DataFrame:
         """Convert raw dataframe to final dataframe with correct dtypes.
 
@@ -136,10 +120,7 @@ class InfomaniakCalendar(DataManager):
             )
             df = self.fetch_raw_calendar_data()
         df = self._handle_duplicate_names(df)
-        df_effectif = (
-            df["payload"].map(self._parse_payload).apply(pd.Series).astype(int)
-        )
-        df = df.join(df_effectif)
+        df.drop(columns=["payload"], inplace=True)
         df = self._remove_na(df)
 
         return df

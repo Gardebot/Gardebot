@@ -47,7 +47,7 @@ class DataManager(ABC):
             df = pd.DataFrame()
         else:
             df = pd.read_parquet(io.BytesIO(response.content))
-            LOGGER.info("File %s found. Loading it into a DataFrame.", filename)
+            LOGGER.debug("File %s found. Loading it into a DataFrame.", filename)
 
         return df
 
