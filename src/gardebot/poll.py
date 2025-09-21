@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 # pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
+# pyright: ignore[reportAttributeAccessIssue]
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -19,6 +20,7 @@ from gardebot.config import (
 )
 from gardebot.datamanager import DataManager
 from gardebot.request import WahaRequest
+from gardebot.vote import VoteManager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,15 +34,22 @@ class PollRequest(WahaRequest):
 
     def process_vote(self, data: Dict[str, Any]) -> None:
         """Process incoming poll votes from WAHA."""
+        vote_manager = VoteManager()
+        poll_df = vote_manager.load_dataframe("polls").set_index("poll_uid")
+        sapeur_df = vote_manager.load_dataframe("sapeurs").set_index("id")
+
         try:
             payload = data.get("payload")
             if payload is None:
                 LOGGER.info("No payload to process with data %s.", data)
                 return
-            voter = payload.get("poll").get("to")
+            voter_id = payload.get("poll").get("to")
+            voter = str(sapeur_df.loc[voter_id, "name"])
             poll_id = payload.get("poll").get("id")
-            selected_options = payload.get("vote").get("selectedOptions", [])
-            LOGGER.info(
+            poll_string = str(poll_df.loc[poll_id, "poll_string"])
+            selected_options = payload.get("vote").get("selectedOptions")[0]
+            vote_manager.update_votes(poll_string, voter, selected_options)
+            LOGGER.debug(
                 "Processed vote from %s on poll %s: %s",
                 voter,
                 poll_id,
@@ -93,12 +102,8 @@ class PollRequest(WahaRequest):
                     multiple_answers=False,
                 )
                 if response is not None and self._is_success(response.status_code):
-                    poll_df.at[index, "poll_uid"] = response.json().get(
-                        "id"
-                    )  # pyright: ignore[reportArgumentType]
-                    poll_df.at[index, "is_published"] = (
-                        True  # pyright: ignore[reportArgumentType]
-                    )
+                    poll_df.at[index, "poll_uid"] = response.json().get("id")
+                    poll_df.loc[index, "is_published"] = True
                     poll_manager.save_dataframe(poll_df, "polls")
                     LOGGER.info("Poll published and marked as published in the table.")
                 else:

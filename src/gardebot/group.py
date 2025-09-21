@@ -134,12 +134,12 @@ class GroupRequest(WahaRequest):
         """Fetch and format a table of group participants with contact info."""
         data_manager = DataManager()
         actual_participants_df = self.fetch_group_participants_table()
-        participants_in_database_df = data_manager.load_dataframe("group_participants")
+        participants_in_database_df = data_manager.load_dataframe("sapeurs")
         if participants_in_database_df.empty:
             LOGGER.info(
                 "No existing participants in database. Saved current participants."
             )
-            data_manager.save_dataframe(actual_participants_df, "group_participants")
+            data_manager.save_dataframe(actual_participants_df, "sapeurs")
             return None
 
         if actual_participants_df["id"].equals(participants_in_database_df["id"]):
