@@ -123,7 +123,6 @@ class GroupRequest(WahaRequest):
             else:
                 contact_info_list.append(contact_info)
         df = pd.DataFrame(contact_info_list)
-        df["phone"] = df["id"].str.extract(r"(\d+)")[0].apply(lambda s: "+" + s)
         df["joined_date"] = pd.Timestamp.now(tz="Europe/Zurich")
         df["group_id"] = self.group_id
 
@@ -144,7 +143,7 @@ class GroupRequest(WahaRequest):
             return None
 
         if actual_participants_df["id"].equals(participants_in_database_df["id"]):
-            LOGGER.debug("No changes in group %s participants.", self.group_id)
+            LOGGER.info("No changes in group %s participants.", self.group_id)
             return None
 
         left_group_mask = ~participants_in_database_df["id"].isin(

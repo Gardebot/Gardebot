@@ -40,7 +40,6 @@ def webhook() -> tuple[Response, int]:
             return jsonify({"status": "error", "message": "Invalid JSON"}), 400
 
         LOGGER.debug("Raw webhook payload: %r", data)
-        LOGGER.info("Webhook payload keys: %s", list(data.keys()))
 
         if "message" in data.get("event"):
             gardebot.process_messages(data)
@@ -48,15 +47,17 @@ def webhook() -> tuple[Response, int]:
             gardebot.process_vote(data)
         elif "session.status" in data.get("event"):
             if "WORKING" in data.get("payload").get("status"):
-                LOGGER.info("Session is now WORKING, synching participants in 60s.")
-                threading.Timer(
-                    60, gardebot.sync_whatsapp_group_participants
-                ).start()  # whatsapp need time to load data
-            else:
-                LOGGER.debug(
-                    "Session status changed: %s", data.get("payload").get("status")
-                )
-
+                LOGGER.debug("Session is now WORKING")
+                gardebot.initialize()
+        elif "group.v2.participants" in data.get("event"):
+            LOGGER.info(
+                "Group participants changed, synching participants in %ss.",
+                SERVER_CONFIG["postpone_sync_time"],
+            )
+            threading.Timer(
+                SERVER_CONFIG["postpone_sync_time"],
+                gardebot.sync_whatsapp_group_participants,
+            ).start()
         else:
             LOGGER.info("Unhandled webhook data shape: %s", data)
 
