@@ -116,7 +116,7 @@ class InfomaniakCalendar(DataManager):
         """
         if df.empty:
             LOGGER.warning(
-                "Empty dataframe provided to convert_raw_to_fnd. Fetching raw data."
+                "Empty calendar dataframe provided to convert_raw_to_fnd. Fetching raw data."
             )
             df = self.fetch_raw_calendar_data()
         df = self._handle_duplicate_names(df)
