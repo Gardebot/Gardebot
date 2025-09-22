@@ -42,3 +42,19 @@ services:
     command: ["doppler", "run", "--", "python", "-m", "gardebot.app"]
     networks:
       - internal
+
+  cron-jobs:
+    build:
+      context: .
+    image: ghcr.io/gardebot/gardebot:latest
+    container_name: cron-jobs
+    restart: unless-stopped
+    env_file:
+      - credentials.env
+    depends_on:
+      - gardebot
+    environment:
+      TZ: Europe/Zurich
+    command: ["doppler", "run", "--", "python", "-m", "gardebot.scheduler"]
+    networks:
+      - internal

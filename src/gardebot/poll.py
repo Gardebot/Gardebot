@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 import pandas as pd  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 
-from gardebot.calendar import InfomaniakCalendar
 from gardebot.config import (
     API_CONFIG,
     MONTHS_FR,
@@ -19,6 +18,7 @@ from gardebot.config import (
     WEEKDAYS_FR,
 )
 from gardebot.datamanager import DataManager
+from gardebot.infomaniak_calendar import InfomaniakCalendar
 from gardebot.request import WahaRequest
 from gardebot.vote import VoteManager
 

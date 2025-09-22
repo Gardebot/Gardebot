@@ -6,10 +6,10 @@ from __future__ import annotations
 import logging
 import threading
 
-from gardebot.calendar import InfomaniakCalendar
 from gardebot.config import API_CONFIG, GROUP_ID_GARDE_ET_PIQUET, SERVER_CONFIG
 from gardebot.contact import ContactRequest
 from gardebot.group import GroupRequest
+from gardebot.infomaniak_calendar import InfomaniakCalendar
 from gardebot.message import MessageRequest
 from gardebot.poll import PollManager, PollRequest
 

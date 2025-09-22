@@ -81,3 +81,17 @@ WEEKDAYS_FR = {
 }
 
 TIME_BEFORE_PUBLICATION_DAY = 21
+EM_NAME = [
+    "Vadim Harych",
+    "David Gori",
+    "Julien Haefelin",
+    "Louis Bretton",
+    "Jean-Seb Fourier",
+    "Damien Neuenschwander",
+    "Liberto Christophe",
+    "Vincent Vuillemier",
+    "Eilean Rieder",
+    "Lionel Bidaux",
+    "Christophe Zurn",
+    "eSim Swisscom",
+]

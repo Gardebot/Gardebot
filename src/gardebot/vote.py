@@ -22,18 +22,18 @@ class VoteManager(DataManager):
         if poll_df is None or sapeur_df is None:
             LOGGER.error("Poll or sapeur dataframe could not be loaded.")
 
-        result_df = pd.DataFrame()
-        result_df.columns = poll_df["poll_string"].tolist()
-        result_df.set_index(keys=sapeur_df["name"].tolist(), inplace=True)
+        result_df = pd.DataFrame(
+            columns=poll_df["poll_string"].tolist(), index=sapeur_df["name"].tolist()
+        )
 
         self.save_dataframe(result_df, "votes")
 
         return result_df
 
     def update_votes(self, poll_string: str, name: str, vote: str) -> None:
-        """Update votes in the votes table."""
+        """Update votes in the votes table with a given vote."""
         vote_df = self.load_dataframe("votes")
-        if vote_df is None:
+        if vote_df.empty:
             vote_df = self._create_result_table()
 
         if vote == "Absent":
