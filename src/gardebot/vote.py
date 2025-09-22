@@ -42,5 +42,11 @@ class VoteManager(DataManager):
             vote_df.at[name, poll_string] = True
         else:
             LOGGER.error("Vote %s not recognized", vote)
-
         self.save_dataframe(vote_df, "votes")
+
+    def _test_poll_completion(self, poll_string: str, vote_df: pd.DataFrame) -> bool:
+        """Test if the poll have enough people."""
+        poll_df = self.load_dataframe("polls").set_index("poll_string")
+        if vote_df[poll_string].sum() >= poll_df.loc[poll_string, "headcount"]:
+            return True
+        return False
