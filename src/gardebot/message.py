@@ -5,12 +5,12 @@ from __future__ import annotations
 # pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Sequence
 
 import pytz  # type: ignore[import-untyped]
 
 from gardebot.common.common import parse_iso_datetime
-from gardebot.config import API_CONFIG, EM_NAME
+from gardebot.config import API_CONFIG, EM_NAME, MAX_NB_REMINDER
 from gardebot.datamanager import DataManager
 from gardebot.request import WahaRequest
 
@@ -70,28 +70,159 @@ class MessageRequest(WahaRequest):
         except Exception as exc:
             LOGGER.exception("Error sending message: %s", exc)
 
+    def send_event_message(
+        self,
+        to_number: str,
+        event_description: str,
+        event_name: str,
+        event_start_time: int,
+        event_end_time: int,
+        location: str,
+        reply_to: Optional[str] = None,
+    ) -> None:
+        """Send an event message using WAHA."""
+        try:
+            endpoint = f"/api/{self.session}/events"
+            payload = {
+                "chatId": to_number,
+                "reply_to": reply_to,
+                "event": {
+                    "name": event_name,
+                    "description": event_description,
+                    "startTime": event_start_time,
+                    "endTime": event_end_time,
+                    "location": {"name": location},
+                },
+            }
+            response = self.send_post_request(endpoint=endpoint, payload=payload)
+            if self._is_success(response.status_code):
+                LOGGER.info("Event sent successfully to %s", to_number)
+            else:
+                LOGGER.error(
+                    "Failed to send event (%s): %s",
+                    response.status_code,
+                    response.text,
+                )
+        except Exception as exc:
+            LOGGER.exception("Error sending event: %s", exc)
+
+    def _test_on_duty_and_published(self, poll_string: str) -> bool:
+        """Test if the poll is on duty and published."""
+        data_manager = DataManager()
+        poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
+        if not (
+            poll_df.loc[poll_string, "on_duty"] is None
+            and poll_df.loc[poll_string, "is_published"]
+        ):
+            LOGGER.info(
+                "Skipping reminder for poll %s as it is not active i.e. on_duty: %s and is_published: %s",
+                poll_string,
+                poll_df.loc[poll_string, "on_duty"],
+                poll_df.loc[poll_string, "is_published"],
+            )
+            return True
+        return False
+
+    def _test_nb_reminder(self, poll_string: str) -> bool:
+        """Test if the poll have reached the maximum number of reminders."""
+        data_manager = DataManager()
+        poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
+        if poll_df.loc[poll_string, "nb_reminder"] >= MAX_NB_REMINDER:
+            LOGGER.info(
+                "Skipping reminder for poll %s as it has reached the maximum number of reminders (%s)",
+                poll_string,
+                poll_df.loc[poll_string, "nb_reminder"],
+            )
+            return True
+        return False
+
+    def _test_elapsed_time(
+        self, poll_id: str, poll_string: str, minimum_elapsed_hours: int = 23
+    ) -> bool:
+        timestamp = (
+            self.get_message_by_id(message_id=poll_id)
+            .get("_data")
+            .get("Info")
+            .get("Timestamp")
+        )
+        if parse_iso_datetime(timestamp) - datetime.now(tz=geneva_tz) < timedelta(
+            hours=minimum_elapsed_hours
+        ):
+            LOGGER.debug(
+                "Skipping reminder for poll %s as it was sent less than 24 hours ago",
+                poll_string,
+            )
+            return True
+        return False
+
+    def _test_all_voted(self, poll_string: str) -> bool:
+        """Test if all sapeurs have voted."""
+        data_manager = DataManager()
+        vote_df = data_manager.load_dataframe("votes")
+        tmp_sapeur_name_who_answered = vote_df[
+            vote_df[poll_string].isnull()
+        ].index.tolist()
+        sapeur_name_who_answered = [
+            name for name in tmp_sapeur_name_who_answered if name not in EM_NAME
+        ]
+
+        if len(sapeur_name_who_answered) == 0:
+            LOGGER.info("All sapeurs have voted for poll %s", poll_string)
+            self.send_text(
+                to_number="41782611429",  # TODO: change to an admin number
+                message_text=f"Salut, Tous les sapeurs ont répondu au sondage {poll_string}.",
+            )
+            return True
+        return False
+
+    def _get_vote_reminders(self) -> List[Dict[str, Any]]:
+        """Prepare reminder data for polls and sapeurs who haven't voted."""
+        data_manager = DataManager()
+        vote_df = data_manager.load_dataframe("votes")
+        poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
+        reminder_payload = []
+        for poll_string in vote_df.columns:
+            poll_id = str(poll_df.loc[poll_string, "poll_uid"])
+
+            if self._test_on_duty_and_published(poll_string):
+                continue
+            if self._test_nb_reminder(poll_string):
+                continue
+            if self._test_elapsed_time(
+                poll_id=poll_id,
+                poll_string=poll_string,
+            ):  # pyright: ignore[reportCallIssue]
+                continue
+            if self._test_all_voted(poll_string):
+                continue
+
+            tmp_sapeur_name_to_send_reminder = vote_df[
+                vote_df[poll_string].isnull()
+            ].index.tolist()
+            sapeur_name_to_send_reminder = [
+                name for name in tmp_sapeur_name_to_send_reminder if name not in EM_NAME
+            ]
+
+            payload = self._get_payload_with_mention(
+                to_number="41782611429",  # TODO: change to group chat
+                name_list=sapeur_name_to_send_reminder,
+                reply_to=poll_id,
+            )
+            message_text = f"Bonjour, Merci à {payload['mentions']} de bien vouloir répondre au sondage"
+            message_text += f" - {poll_string} - attaché à ce mesage :)"
+            payload["text"] = message_text
+            reminder_payload.append(payload)
+            poll_df.at[
+                poll_string, "nb_reminder"
+            ] += 1  # pyright: ignore[reportOperatorIssue]
+
+        return reminder_payload
+
     def send_vote_reminder(self) -> None:
         """Send a reminder message to vote."""
-        reminders = self._get_vote_reminders()
-        for reminder in reminders:
-            poll_string = reminder["poll_string"]
+        reminder_payload = self._get_vote_reminders()
+        for payload in reminder_payload:
 
-            if reminder["all_voted"]:
-                LOGGER.info("All sapeurs have voted for poll %s", poll_string)
-                self.send_text(
-                    to_number="41782611429",  # TODO: change to an admin number
-                    message_text=f"Salut, Tous les sapeurs ont répondu au sondage {poll_string}.",
-                )
-                continue
-            message_text = f"Bonjour, Merci à {reminder['mention_text']} de bien vouloir répondre au sondage"
-            message_text += f" - {poll_string} - attaché à ce mesage :)"
-            payload = {
-                "session": self.session,
-                "chatId": "41782611429",  # TODO: change to group chat
-                "reply_to": reminder["poll_id"],
-                "mentions": reminder["sapeur_ids"],
-                "text": message_text,
-            }
             try:
                 response = self.send_post_request(
                     endpoint="/api/sendText", payload=payload
@@ -108,68 +239,6 @@ class MessageRequest(WahaRequest):
                     )
             except Exception as exc:
                 LOGGER.exception("Error sending reminder: %s", exc)
-
-    def _get_vote_reminders(self) -> List[Dict[str, Any]]:
-        """Prepare reminder data for polls and sapeurs who haven't voted."""
-        data_manager = DataManager()
-        vote_df = data_manager.load_dataframe("votes")
-        poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
-        sapeur_df = data_manager.load_dataframe("sapeurs").set_index("name")
-
-        reminders = []
-        for poll_string in vote_df.columns:
-            if not (
-                poll_df.loc[poll_string, "on_duty"] is None
-                and poll_df.loc[poll_string, "is_published"]
-            ):
-                LOGGER.info(
-                    "Skipping reminder for poll %s as it is not active i.e. on_duty: %s and is_published: %s",
-                    poll_string,
-                    poll_df.loc[poll_string, "on_duty"],
-                    poll_df.loc[poll_string, "is_published"],
-                )
-                continue
-
-            poll_id = poll_df.loc[poll_string, "poll_uid"]
-            timestamp = (
-                self.get_message_by_id(message_id=poll_id)
-                .get("_data")
-                .get("Info")
-                .get("Timestamp")
-            )
-            if parse_iso_datetime(timestamp) - datetime.now(tz=geneva_tz) < timedelta(
-                hours=23
-            ):
-                LOGGER.debug(
-                    "Skipping reminder for poll %s as it was sent less than 24 hours ago",
-                    poll_string,
-                )
-                continue
-            tmp_sapeur_name_to_send_reminder = vote_df[
-                vote_df[poll_string].isnull()
-            ].index.tolist()
-            sapeur_name_to_send_reminder = [
-                name for name in tmp_sapeur_name_to_send_reminder if name not in EM_NAME
-            ]
-            sapeur_id_to_send_reminder = [
-                sapeur_df.loc[name, "id"] for name in sapeur_name_to_send_reminder
-            ]
-            sapeur_phone_to_send_reminder = [
-                "@" + str(sapeur_df.loc[name, "phone"])[1:]
-                for name in sapeur_name_to_send_reminder
-            ]
-            mention_text = ", ".join(sapeur_phone_to_send_reminder)
-
-            reminders.append(
-                {
-                    "poll_string": poll_string,
-                    "poll_id": poll_id,
-                    "sapeur_ids": sapeur_id_to_send_reminder,
-                    "mention_text": mention_text,
-                    "all_voted": len(sapeur_name_to_send_reminder) == 0,
-                }
-            )
-        return reminders
 
     def get_message_by_id(self, message_id: str) -> Any:
         """Get a message by its ID using WAHA."""
@@ -189,3 +258,85 @@ class MessageRequest(WahaRequest):
         except Exception as exc:
             LOGGER.exception("Error retrieving message: %s", exc)
             return {}
+
+    def _get_payload_with_mention(
+        self, to_number: str, name_list: List[str], reply_to: Optional[str]
+    ) -> Dict[str, Sequence[str]]:
+        """Prepare payload for sending message with mentions."""
+        data_manager = DataManager()
+        sapeur_df = data_manager.load_dataframe("sapeurs").set_index("name")
+
+        mentions = [str(sapeur_df.loc[name, "id"]) for name in name_list]
+        text_mention = ", ".join(
+            ["@" + str(sapeur_df.loc[name, "phone"])[1:] for name in name_list]
+        )
+        payload = {
+            "session": self.session,
+            "chatId": to_number,
+            "text": text_mention,
+            "mentions": mentions,
+        }
+        if reply_to:
+            payload["reply_to"] = reply_to
+        return payload
+
+    def _send_group_convocation(
+        self, to_number: str, poll_string: str, on_duty_name: List[str], poll_id: str
+    ) -> None:
+        payload = self._get_payload_with_mention(
+            to_number=to_number, name_list=on_duty_name, reply_to=poll_id
+        )
+        group_text = f"Merci à {payload['mentions']} pour la garde: {poll_string}. Vous êtes convoqué.e.s, merci pour votre engagement :)"
+        payload["text"] = group_text
+        try:
+            response = self.send_post_request(endpoint="/api/sendText", payload=payload)
+            if self._is_success(response.status_code):
+                LOGGER.info("Convocation sent successfully to %s", to_number)
+            else:
+                LOGGER.error(
+                    "Failed to send convocation (%s): %s",
+                    response.status_code,
+                    response.text,
+                )
+        except Exception as exc:
+            LOGGER.exception("Error sending convocation: %s", exc)
+
+    def _send_private_convocation(
+        self, to_number: str, poll_string: str, poll_id: str
+    ) -> None:
+        """Send a private convocation message using an event message."""
+        data_manager = DataManager()
+        calendar_df = data_manager.load_dataframe("calendar").set_index("uid")
+        poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
+        uid = poll_df.loc[poll_string, "uid"]
+        event_description = f"Bonjour, Vous êtes convoqué.e.s pour la garde : {poll_string} et merci pour votre engagement :)"
+        try:
+            self.send_event_message(
+                to_number=to_number,
+                event_description=event_description,
+                event_name=calendar_df.loc[uid, "name"],
+                event_start_time=int(calendar_df.loc[uid, "date_start"].timestamp()),
+                event_end_time=int(calendar_df.loc[uid, "date_end"].timestamp()),
+                location=calendar_df.loc[uid, "location"],
+                reply_to=poll_id,
+            )
+        except Exception as exc:
+            LOGGER.exception("Error sending private convocation: %s", exc)
+
+    def send_convocation(
+        self, poll_string: str, on_duty_name: List[str], poll_id: str
+    ) -> None:
+        """Send a convocation message in private and in group using WAHA."""
+        data_manager = DataManager()
+        sapeur_df = data_manager.load_dataframe("sapeurs").set_index("name")
+        self._send_group_convocation(
+            to_number="41782611429",
+            poll_string=poll_string,
+            on_duty_name=on_duty_name,
+            poll_id=poll_id,
+        )
+        for name in on_duty_name:
+            to_number = str(sapeur_df.loc[name, "phone"])
+            self._send_private_convocation(
+                to_number=to_number, poll_string=poll_string, poll_id=poll_id
+            )

@@ -32,7 +32,7 @@ class PollRequest(WahaRequest):
         """Initialize the PollRequest instance."""
         super().__init__(base_url=base_url)
 
-    def process_vote(self, data: Dict[str, Any]) -> None:
+    def process_vote(self, data: Dict[str, Any]) -> Optional[str]:
         """Process incoming poll votes from WAHA."""
         vote_manager = VoteManager()
         poll_df = vote_manager.load_dataframe("polls").set_index("poll_uid")
@@ -42,21 +42,24 @@ class PollRequest(WahaRequest):
             payload = data.get("payload")
             if payload is None:
                 LOGGER.info("No payload to process with data %s.", data)
-                return
+                return None
             voter_id = payload.get("poll").get("to")
             voter = str(sapeur_df.loc[voter_id, "name"])
             poll_id = payload.get("poll").get("id")
             poll_string = str(poll_df.loc[poll_id, "poll_string"])
             selected_options = payload.get("vote").get("selectedOptions")[0]
             vote_manager.update_votes(poll_string, voter, selected_options)
+
             LOGGER.debug(
                 "Processed vote from %s on poll %s: %s",
                 voter,
                 poll_id,
                 selected_options,
             )
+            return poll_string
         except Exception as exc:
             LOGGER.exception("Error in process_vote: %s", exc)
+            return None
 
     def send_poll(
         self,
@@ -166,6 +169,7 @@ class PollManager(DataManager):
         poll_df = self._consecutive_events(poll_df)
         poll_df.sort_values(by="date_start", inplace=True)
         poll_df["on_duty"] = None
+        poll_df["nb_reminder"] = 0
         poll_df["is_published"] = False
         poll_df["poll_uid"] = None
         poll_df.drop(

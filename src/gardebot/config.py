@@ -95,3 +95,4 @@ EM_NAME = [
     "Christophe Zurn",
     "eSim Swisscom",
 ]
+MAX_NB_REMINDER = 3

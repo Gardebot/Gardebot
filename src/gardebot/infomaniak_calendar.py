@@ -47,7 +47,7 @@ class InfomaniakCalendar(DataManager):
                         {
                             "name": str(component.get("summary")),
                             "location": str(component.get("location")),
-                            "payload": str(component.get("description")),
+                            "headcount": int(component.get("description")),
                             "date_start": date_start.tz_localize(None),
                             "date_end": pd.to_datetime(
                                 component.get("dtend").dt, errors="coerce"
@@ -120,7 +120,6 @@ class InfomaniakCalendar(DataManager):
             )
             df = self.fetch_raw_calendar_data()
         df = self._handle_duplicate_names(df)
-        df.drop(columns=["payload"], inplace=True)
         df = self._remove_na(df)
 
         return df
