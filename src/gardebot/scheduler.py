@@ -56,10 +56,10 @@ def warn_holidays() -> None:
 
 if __name__ == "__main__":
     scheduler = BlockingScheduler(timezone="Europe/Zurich")
-    scheduler.add_job(sync_events, "cron", hour=2, minute=0)
-    scheduler.add_job(warn_holidays, "cron", hour=12, minute=0)
-    scheduler.add_job(check_polls_completion, "cron", hour=10, minute=0)
-    scheduler.add_job(publish_polls, "cron", hour=9, minutes=0)
+    scheduler.add_job(sync_events, "cron", hour=2)
+    scheduler.add_job(warn_holidays, "cron", hour=12)
+    scheduler.add_job(check_polls_completion, "cron", hour=10)
+    scheduler.add_job(publish_polls, "cron", hour=9)
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
