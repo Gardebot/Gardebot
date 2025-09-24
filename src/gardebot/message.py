@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Sequence
 
+import pandas as pd  # type: ignore[import-untyped]
 import pytz  # type: ignore[import-untyped]
 
 from gardebot.common.common import parse_iso_datetime
@@ -116,9 +117,9 @@ class MessageRequest(WahaRequest):
         """Test if the poll is published."""
         data_manager = DataManager()
         poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
-        if poll_df.loc[poll_string, "is_published"]:
-            return True
-        return False
+        if pd.isna(poll_df.loc[poll_string, "published_date"]):
+            return False
+        return True
 
     def test_assigned(self, poll_string: str) -> bool:
         """Test if the poll is on duty."""

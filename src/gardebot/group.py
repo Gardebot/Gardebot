@@ -40,7 +40,7 @@ class GroupRequest(WahaRequest):
         try:
             response = self.send_get_request(endpoint=endpoint)
             if self._is_success(response.status_code):
-                LOGGER.info(
+                LOGGER.debug(
                     "Participants fetched successfully for group %s", self.group_id
                 )
                 participants: List[Dict[str, Any]] = response.json()
@@ -166,3 +166,16 @@ class GroupRequest(WahaRequest):
         )
         data_manager.save_dataframe(updated_df, "group_participants")
         return None
+
+    def compare_poll_publication_vs_entry_date(self, poll_string: str) -> List[str]:
+        """Compare the publication date of polls to the entry date in the group for a member."""
+        data_manager = DataManager()
+        sapeur_df = data_manager.load_dataframe("sapeurs").set_index("name")
+        poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
+        publication_date = poll_df.loc[poll_string, "published_date"]
+        if sapeur_df.empty or poll_df.empty:
+            LOGGER.error("Sapeur or poll dataframe could not be loaded.")
+        mask = sapeur_df["joined_date"] <= publication_date
+        filtered_names: List[str] = sapeur_df[mask].index.tolist()
+
+        return filtered_names

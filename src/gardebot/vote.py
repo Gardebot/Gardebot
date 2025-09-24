@@ -8,6 +8,7 @@ from typing import List, Optional, Union
 
 import pandas as pd  # type: ignore[import-untyped]
 
+from gardebot.config import EM_NAME
 from gardebot.datamanager import DataManager
 
 LOGGER = logging.getLogger(__name__)
@@ -74,6 +75,13 @@ class VoteManager(DataManager):
         self, sapeur_list_name: List[str], nb_to_nominate: int, poll_string: str
     ) -> Optional[List[str]]:
         """Nominate nb_to_nominate people in the sapeur_list_name, based on their overall participations and answer."""
+        for etat_major in EM_NAME:
+            if etat_major in sapeur_list_name:
+                LOGGER.debug(
+                    "Removing %s from the nomination list as part of the Etat Major.",
+                    etat_major,
+                )
+                sapeur_list_name.remove(etat_major)
         if len(sapeur_list_name) == nb_to_nominate:
             return sapeur_list_name
         if len(sapeur_list_name) < nb_to_nominate:

@@ -46,7 +46,9 @@ class InfomaniakCalendar(DataManager):
                     events_data.append(
                         {
                             "name": str(component.get("summary")),
-                            "location": str(component.get("location")),
+                            "location": str(component.get("location")).split(
+                                ",", maxsplit=1
+                            )[0],
                             "headcount": int(component.get("description")),
                             "date_start": date_start.tz_localize(None),
                             "date_end": pd.to_datetime(
@@ -115,7 +117,7 @@ class InfomaniakCalendar(DataManager):
             pd.DataFrame: Final dataframe clean and ready to use for polls.
         """
         if df.empty:
-            LOGGER.warning(
+            LOGGER.debug(
                 "Empty calendar dataframe provided to convert_raw_to_fnd. Fetching raw data."
             )
             df = self.fetch_raw_calendar_data()
@@ -129,7 +131,7 @@ class InfomaniakCalendar(DataManager):
         actual_df = self.convert_raw_to_fnd()
         db_df = self.load_dataframe("calendar")
         if db_df.empty:
-            LOGGER.info("No existing calendar in database. Saving current calendar.")
+            LOGGER.debug("No existing calendar in database. Saving current calendar.")
             self.save_dataframe(actual_df, "calendar")
             return None
 

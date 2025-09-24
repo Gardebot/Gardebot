@@ -100,8 +100,8 @@ class PollRequest(WahaRequest):
 
         for index, row in poll_df.iterrows():
             if (
-                not row["is_published"]
-                and row["published_date"].date() <= datetime.now().date()
+                pd.isna(row["published_date"])
+                and row["scheduled_publication_date"].date() <= datetime.now().date()
             ):
                 response = self.send_poll(
                     to_conv=GROUP_ID_GARDE_ET_PIQUET,
@@ -111,7 +111,7 @@ class PollRequest(WahaRequest):
                 )
                 if response is not None and self._is_success(response.status_code):
                     poll_df.at[index, "poll_uid"] = response.json().get("id")
-                    poll_df.loc[index, "is_published"] = True
+                    poll_df.loc[index, "published_date"] = pd.Timestamp.now()
                     poll_manager.save_dataframe(poll_df, "polls")
                     LOGGER.info("Poll published and marked as published in the table.")
                 else:
@@ -156,7 +156,9 @@ class PollManager(DataManager):
             row = df.iloc[i]
             next_row = df.iloc[i + 1]
             if row["date_start"].date() == next_row["date_start"].date():
-                df.at[df.index[i + 1], "published_date"] = row["published_date"]
+                df.at[df.index[i + 1], "scheduled_publication_date"] = row[
+                    "scheduled_publication_date"
+                ]
         return df
 
     def _create_poll_table(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -168,14 +170,14 @@ class PollManager(DataManager):
             ),
             axis=1,
         )
-        poll_df["published_date"] = poll_df["date_start"] - pd.Timedelta(
+        poll_df["scheduled_publication_date"] = poll_df["date_start"] - pd.Timedelta(
             days=TIME_BEFORE_PUBLICATION_DAY
         )
         poll_df = self._consecutive_events(poll_df)
         poll_df.sort_values(by="date_start", inplace=True)
         poll_df["nb_reminder"] = 0
-        poll_df["is_published"] = False
         poll_df["poll_uid"] = None
+        poll_df["published_date"] = pd.NaT
         poll_df.drop(
             columns=["name", "location", "date_start", "date_end"], inplace=True
         )
@@ -188,7 +190,7 @@ class PollManager(DataManager):
         calendar_df = calendar.load_dataframe("calendar")
         poll_df = self.load_dataframe("polls")
         if poll_df.empty:
-            LOGGER.info("No existing poll data. Creating new poll table.")
+            LOGGER.debug("No existing poll data. Creating new poll table.")
             poll_df = self._create_poll_table(calendar_df)
             self.save_dataframe(poll_df, "polls")
             return None
@@ -201,7 +203,9 @@ class PollManager(DataManager):
         updated_poll_df = pd.concat([poll_df, new_poll_df], ignore_index=True)
         LOGGER.info(
             "New event(s) found for poll creation: %s",
-            new_poll_df[["poll_string", "published_date"]].to_dict(orient="records"),
+            new_poll_df[["poll_string", "scheduled_publication_date"]].to_dict(
+                orient="records"
+            ),
         )
         self.save_dataframe(updated_poll_df, "polls")
         return None
