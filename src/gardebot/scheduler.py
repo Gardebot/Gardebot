@@ -1,6 +1,7 @@
 """Scheduler to periodically do stuff."""
 
 import logging
+import os
 
 from apscheduler.schedulers.blocking import (  # type: ignore[import-untyped]
     BlockingScheduler,
@@ -45,9 +46,18 @@ def check_polls_completion() -> None:
     LOGGER.info("Scheduled poll completion check finished.")
 
 
+def warn_holidays() -> None:
+    """Warn for upcoming holidays."""
+    LOGGER.info("Starting scheduled holiday warning...")
+    gardebot = Gardebot()
+    gardebot.send_holiday_warning(to_number=os.environ.get("ADMIN_NUMBER", ""))
+    LOGGER.info("Scheduled holiday warning finished.")
+
+
 if __name__ == "__main__":
     scheduler = BlockingScheduler(timezone="Europe/Zurich")
     scheduler.add_job(sync_events, "cron", hour=2, minute=0)
+    scheduler.add_job(warn_holidays, "cron", hour=12, minute=0)
     scheduler.add_job(check_polls_completion, "cron", hour=10, minute=0)
     scheduler.add_job(publish_polls, "cron", hour=9, minutes=0)
     try:

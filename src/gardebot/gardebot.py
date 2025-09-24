@@ -8,10 +8,14 @@ import os
 import threading
 from typing import Any, Dict
 
+import holidays
+import pandas as pd  # type: ignore[import-untyped]
+
 from gardebot.config import (
     API_CONFIG,
     GROUP_ID_GARDE_ET_PIQUET,
     MAX_NB_REMINDER,
+    PREVENTION_DAY_BEFORE_HOLIDAY,
     SERVER_CONFIG,
 )
 from gardebot.contact import ContactRequest
@@ -101,3 +105,18 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         self.send_text(
             to_number=os.environ.get("ADMIN_NUMBER", ""), message_text=message
         )
+
+    def send_holiday_warning(self, to_number: str) -> None:
+        """Send a warning message for upcoming holidays."""
+        today = pd.Timestamp.now(tz="Europe/Zurich")
+        geneva_holidays = holidays.country_holidays(
+            "CH", subdiv="GE", years=[today.year, today.year + 1]
+        )
+        upcoming_holidays = {
+            date: name for date, name in geneva_holidays.items() if date >= today.date()
+        }
+        for date, name in sorted(upcoming_holidays.items()):
+            timedelta = date - today.date()
+            if timedelta.days == PREVENTION_DAY_BEFORE_HOLIDAY:
+                message = f"Prochain jour férié: {name} le {date.strftime('%A %d %B %Y')}. Tu dois peut-être prévoir des piquets!"
+                self.send_text(to_number=to_number, message_text=message)

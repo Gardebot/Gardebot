@@ -84,6 +84,7 @@ WEEKDAYS_FR = {
 }
 
 TIME_BEFORE_PUBLICATION_DAY = 21
+PREVENTION_DAY_BEFORE_HOLIDAY = 35
 EM_NAME = [
     # "Vadim Harych",
     # "David Gori",
