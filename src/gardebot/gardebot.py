@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-# pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
+# pylint: disable=broad-exception-caught, protected-access, dangerous-default-value, singleton-comparison
 import logging
+import os
 import threading
 from typing import Any, Dict
 
@@ -54,17 +55,49 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
     def process_vote(self, data: Dict[str, Any]) -> None:
         """Process incoming poll votes from WAHA and check for poll completion."""
         poll_string = super().process_vote(data)
-        if not poll_string:
-            return
+        if poll_string is None:
+            LOGGER.error("No poll_string returned from poll.process_vote.")
+            return None
+        # we delay the check to let you the time to change your mind
+        threading.Timer(180, self.check_poll_completion, args=poll_string).start()
+        return None
+
+    def check_poll_completion(self, poll_string: str) -> None:
+        """Check if a poll is complete and send on_duty to admin."""
         vote_manager = VoteManager()
         vote_df = vote_manager.load_dataframe("votes")
-        if vote_manager._test_poll_completion(poll_string, vote_df):
-            on_duty = vote_df[vote_df[poll_string] is True].index.tolist()
+        poll_df = vote_manager.load_dataframe("polls").set_index("poll_string")
+        headcount = int(
+            poll_df.loc[poll_string, "headcount"]
+        )  # pyright: ignore[reportArgumentType]
+        on_duty = vote_df[vote_df[poll_string] == True].index.tolist()
+        nb_to_nominate = headcount - len(on_duty)
+        if vote_manager.test_poll_completion(poll_string, vote_df):
             message = f"Le poll {poll_string} est complet. Tu peux convoquer les sapeurs: {on_duty}"
-            self.send_text(to_number="41782611429", message_text=message)
-        elif self._test_all_voted(poll_string):
-            message = f"Le poll {poll_string} a reçu toutes les réponses mais n'est pas complet. Nomination forcée"
-            self.send_text(to_number="41782611429", message_text=message)
-        elif self._test_nb_reminder(poll_string):
-            message = f"Le poll {poll_string} n'est pas complet après {MAX_NB_REMINDER} Rappel. Nomination forcée"
-            self.send_text(to_number="41782611429", message_text=message)
+            vote_manager.update_on_duty(poll_string, on_duty)
+        elif self.test_all_voted(poll_string):
+            sapeur_list = vote_df[vote_df[poll_string] == False].index.tolist()
+
+            on_duty_by_force = vote_manager.force_nomination(
+                poll_string=poll_string,
+                nb_to_nominate=nb_to_nominate,
+                sapeur_list_name=sapeur_list,
+            )
+            on_duty.extend(on_duty_by_force)  # pyright: ignore[reportArgumentType]
+            vote_manager.update_on_duty(poll_string, on_duty)
+            message = f"Le poll {poll_string} a reçu des réponses de tout le monde mais n'est pas complet. Nomination forcée {on_duty}"
+        elif self.test_nb_reminder(poll_string):
+            sapeur_list = vote_df[vote_df[poll_string].isna()].index.tolist()
+            on_duty_by_force = vote_manager.force_nomination(
+                poll_string=poll_string,
+                nb_to_nominate=nb_to_nominate,
+                sapeur_list_name=sapeur_list,
+            )
+            on_duty += on_duty_by_force  # pyright: ignore[reportOperatorIssue]
+            vote_manager.update_on_duty(poll_string, on_duty)
+            message = f"Le poll {poll_string} n'est pas complet après {MAX_NB_REMINDER} Rappel. Nomination forcée {on_duty}"
+        else:
+            message = f"Le poll {poll_string} n'est pas encore complet. Sapeurs déjà Pré-nommé: {on_duty}"
+        self.send_text(
+            to_number=os.environ.get("ADMIN_NUMBER", ""), message_text=message
+        )

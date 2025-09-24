@@ -36,7 +36,8 @@ API_CONFIG: ApiConfigType = {
     "api_key": _load_secret("API_KEY"),
 }
 
-GROUP_ID_GARDE_ET_PIQUET = "120363402596282813@g.us"
+# GROUP_ID_GARDE_ET_PIQUET = "120363402596282813@g.us"
+GROUP_ID_GARDE_ET_PIQUET = "41782611429"
 
 
 class ServerConfigType(TypedDict):

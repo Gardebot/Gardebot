@@ -13,6 +13,7 @@ import requests  # type: ignore[import-untyped]
 
 from gardebot.config import (
     API_CONFIG,
+    GROUP_ID_GARDE_ET_PIQUET,
     MONTHS_FR,
     TIME_BEFORE_PUBLICATION_DAY,
     WEEKDAYS_FR,
@@ -47,8 +48,11 @@ class PollRequest(WahaRequest):
             voter = str(sapeur_df.loc[voter_id, "name"])
             poll_id = payload.get("poll").get("id")
             poll_string = str(poll_df.loc[poll_id, "poll_string"])
-            selected_options = payload.get("vote").get("selectedOptions")[0]
-            vote_manager.update_votes(poll_string, voter, selected_options)
+            selected_options = payload.get("vote").get("selectedOptions")
+            if len(selected_options) > 0:
+                vote_manager.update_votes(poll_string, voter, selected_options)
+            else:
+                vote_manager.update_votes(poll_string, voter, None)
 
             LOGGER.debug(
                 "Processed vote from %s on poll %s: %s",
@@ -57,8 +61,9 @@ class PollRequest(WahaRequest):
                 selected_options,
             )
             return poll_string
+
         except Exception as exc:
-            LOGGER.exception("Error in process_vote: %s", exc)
+            LOGGER.error("Error in process_vote: %s", exc)
             return None
 
     def send_poll(
@@ -99,7 +104,7 @@ class PollRequest(WahaRequest):
                 and row["published_date"].date() <= datetime.now().date()
             ):
                 response = self.send_poll(
-                    to_conv="41782611429",  # TODO: move to config
+                    to_conv=GROUP_ID_GARDE_ET_PIQUET,
                     poll_title=row["poll_string"],
                     poll_options=["Absent", "Présent"],
                     multiple_answers=False,
@@ -168,7 +173,6 @@ class PollManager(DataManager):
         )
         poll_df = self._consecutive_events(poll_df)
         poll_df.sort_values(by="date_start", inplace=True)
-        poll_df["on_duty"] = None
         poll_df["nb_reminder"] = 0
         poll_df["is_published"] = False
         poll_df["poll_uid"] = None

@@ -4,13 +4,19 @@ from __future__ import annotations
 
 # pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Sequence
 
 import pytz  # type: ignore[import-untyped]
 
 from gardebot.common.common import parse_iso_datetime
-from gardebot.config import API_CONFIG, EM_NAME, MAX_NB_REMINDER
+from gardebot.config import (
+    API_CONFIG,
+    EM_NAME,
+    GROUP_ID_GARDE_ET_PIQUET,
+    MAX_NB_REMINDER,
+)
 from gardebot.datamanager import DataManager
 from gardebot.request import WahaRequest
 
@@ -106,39 +112,36 @@ class MessageRequest(WahaRequest):
         except Exception as exc:
             LOGGER.exception("Error sending event: %s", exc)
 
-    def _test_on_duty_and_published(self, poll_string: str) -> bool:
-        """Test if the poll is on duty and published."""
+    def test_is_published(self, poll_string: str) -> bool:
+        """Test if the poll is published."""
         data_manager = DataManager()
         poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
-        if not (
-            poll_df.loc[poll_string, "on_duty"] is None
-            and poll_df.loc[poll_string, "is_published"]
-        ):
-            LOGGER.info(
-                "Skipping reminder for poll %s as it is not active i.e. on_duty: %s and is_published: %s",
-                poll_string,
-                poll_df.loc[poll_string, "on_duty"],
-                poll_df.loc[poll_string, "is_published"],
-            )
+        if poll_df.loc[poll_string, "is_published"]:
             return True
         return False
 
-    def _test_nb_reminder(self, poll_string: str) -> bool:
+    def test_assigned(self, poll_string: str) -> bool:
+        """Test if the poll is on duty."""
+        data_manager = DataManager()
+        on_duty_df = data_manager.load_dataframe("on_duty")
+        on_duty_list = on_duty_df[~on_duty_df[poll_string].isna()].index.tolist()
+
+        if len(on_duty_list) > 0:
+            return True
+        return False
+
+    def test_nb_reminder(self, poll_string: str) -> bool:
         """Test if the poll have reached the maximum number of reminders."""
         data_manager = DataManager()
         poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
         if poll_df.loc[poll_string, "nb_reminder"] >= MAX_NB_REMINDER:
-            LOGGER.info(
-                "Skipping reminder for poll %s as it has reached the maximum number of reminders (%s)",
-                poll_string,
-                poll_df.loc[poll_string, "nb_reminder"],
-            )
             return True
         return False
 
-    def _test_elapsed_time(
+    def test_elapsed_time(
         self, poll_id: str, poll_string: str, minimum_elapsed_hours: int = 23
     ) -> bool:
+        """Test if the poll was sent more than minimum_elapsed_hours ago."""
         timestamp = (
             self.get_message_by_id(message_id=poll_id)
             .get("_data")
@@ -155,7 +158,7 @@ class MessageRequest(WahaRequest):
             return True
         return False
 
-    def _test_all_voted(self, poll_string: str) -> bool:
+    def test_all_voted(self, poll_string: str) -> bool:
         """Test if all sapeurs have voted."""
         data_manager = DataManager()
         vote_df = data_manager.load_dataframe("votes")
@@ -169,11 +172,46 @@ class MessageRequest(WahaRequest):
         if len(sapeur_name_who_answered) == 0:
             LOGGER.info("All sapeurs have voted for poll %s", poll_string)
             self.send_text(
-                to_number="41782611429",  # TODO: change to an admin number
+                to_number=os.environ.get("ADMIN_NUMBER", ""),
                 message_text=f"Salut, Tous les sapeurs ont répondu au sondage {poll_string}.",
             )
             return True
         return False
+
+    def test_has_to_be_reminded(self, poll_string: str, poll_id: str) -> bool:
+        """Test if the poll has to be reminded."""
+        if not self.test_is_published(poll_string):
+            LOGGER.info(
+                "Skipping reminder for poll %s as it is not published yet", poll_string
+            )
+            return False
+        if self.test_assigned(poll_string):
+            LOGGER.info(
+                "Skipping reminder for poll %s as it is already assigned", poll_string
+            )
+            return False
+        if self.test_nb_reminder(poll_string):
+            LOGGER.info(
+                "Skipping reminder for poll %s as it reached max number of reminders",
+                poll_string,
+            )
+            return False
+        if self.test_elapsed_time(
+            poll_id=poll_id,
+            poll_string=poll_string,
+        ):  # pyright: ignore[reportCallIssue]
+            LOGGER.info(
+                "Skipping reminder for poll %s as it was sent less than 24 hours ago",
+                poll_string,
+            )
+            return False
+        if self.test_all_voted(poll_string):
+            LOGGER.info(
+                "Skipping reminder for poll %s as all sapeurs have voted",
+                poll_string,
+            )
+            return False
+        return True
 
     def _get_vote_reminders(self) -> List[Dict[str, Any]]:
         """Prepare reminder data for polls and sapeurs who haven't voted."""
@@ -184,16 +222,7 @@ class MessageRequest(WahaRequest):
         for poll_string in vote_df.columns:
             poll_id = str(poll_df.loc[poll_string, "poll_uid"])
 
-            if self._test_on_duty_and_published(poll_string):
-                continue
-            if self._test_nb_reminder(poll_string):
-                continue
-            if self._test_elapsed_time(
-                poll_id=poll_id,
-                poll_string=poll_string,
-            ):  # pyright: ignore[reportCallIssue]
-                continue
-            if self._test_all_voted(poll_string):
+            if not self.test_has_to_be_reminded(poll_string, poll_id):
                 continue
 
             tmp_sapeur_name_to_send_reminder = vote_df[
@@ -204,7 +233,9 @@ class MessageRequest(WahaRequest):
             ]
 
             payload = self._get_payload_with_mention(
-                to_number="41782611429",  # TODO: change to group chat
+                to_number=os.environ.get(
+                    "ADMIN_NUMBER", ""
+                ),  # TODO: change to group chat
                 name_list=sapeur_name_to_send_reminder,
                 reply_to=poll_id,
             )
@@ -229,8 +260,11 @@ class MessageRequest(WahaRequest):
                 )
                 if self._is_success(response.status_code):
                     LOGGER.info(
-                        "Reminder sent successfully to %s", "41782611429"
-                    )  # TODO: change to group chat
+                        "Reminder sent successfully to %s",
+                        os.environ.get(
+                            "ADMIN_NUMBER"
+                        ),  # TODO: Chnage to number in payload
+                    )
                 else:
                     LOGGER.error(
                         "Failed to send reminder (%s): %s",
@@ -243,7 +277,7 @@ class MessageRequest(WahaRequest):
     def get_message_by_id(self, message_id: str) -> Any:
         """Get a message by its ID using WAHA."""
         try:
-            chat_id = "41782611429"  # TODO: change to group chat
+            chat_id = GROUP_ID_GARDE_ET_PIQUET
             endpoint = f"/api/{self.session}/chats/{chat_id}/messages/{message_id}?downloadMedia=true"
             response = self.send_get_request(endpoint=endpoint)
             if self._is_success(response.status_code):
@@ -330,7 +364,7 @@ class MessageRequest(WahaRequest):
         data_manager = DataManager()
         sapeur_df = data_manager.load_dataframe("sapeurs").set_index("name")
         self._send_group_convocation(
-            to_number="41782611429",
+            to_number=os.environ.get("ADMIN_NUMBER", ""),  # TODO: change to group chat
             poll_string=poll_string,
             on_duty_name=on_duty_name,
             poll_id=poll_id,
