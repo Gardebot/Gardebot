@@ -3,11 +3,13 @@
 import hashlib
 import logging
 import os
+from typing import Any, Dict, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
 import pytz  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 from icalendar import Calendar  # type: ignore[import-untyped]
+from icalendar.cal import Component  # type: ignore[import-untyped]
 
 from gardebot.datamanager import DataManager
 
@@ -22,6 +24,124 @@ class InfomaniakCalendar(DataManager):
         """Initializes the Calendar class."""
         super().__init__()
         self.url = os.environ.get("CALENDAR_URL")
+
+    def _get_name_from_event(self, event: Component) -> Optional[str]:
+        """Extracts the name from an event.
+
+        Args:
+            event (Component): Event to extract the name from.
+
+        Returns:
+            Optional[str]: Name of the event or None if not found.
+        """
+        name = event.get("summary")
+        if name is None or len(name) == 0:
+            LOGGER.error(
+                "⚠️ Missing name for one of your event. Not writing it in calendar dataframe ⚠️"
+            )
+            return None
+        return str(name)
+
+    def _get_location_from_event(self, event: Component) -> Optional[str]:
+        """Extracts the location from an event.
+
+        Args:
+            event (Component): Event to extract the location from.
+
+        Returns:
+            Optional[str]: Location of the event or None if not found.
+        """
+        location = event.get("location")
+        if location is None or len(location) == 0:
+            LOGGER.error(
+                "⚠️ Missing location for event '%s'. Not writing it in calendar dataframe ⚠️",
+                event.get("summary"),
+            )
+            return None
+        return str(location).split(",", maxsplit=1)[0]
+
+    def _get_headcount_from_event(self, event: Component) -> Optional[int]:
+        """Extracts the headcount from an event.
+
+        Args:
+            event (Component): Event to extract the headcount from.
+
+        Returns:
+            Optional[int]: Headcount of the event or None if not found.
+        """
+        headcount = event.get("description")
+        if headcount is None or len(headcount) == 0 or int(headcount) == 0:
+            LOGGER.error(
+                "⚠️ Missing or zero headcount for event '%s'. Not writing it in calendar dataframe ⚠️",
+                event.get("summary"),
+            )
+            return None
+        return int(headcount)
+
+    def _get_date_from_event(
+        self, event: Component, key: str
+    ) -> Optional[pd.Timestamp]:
+        """Extracts the date from an event.
+
+        Args:
+            event (Component): Event to extract the date from.
+            key (str): Key to extract the date from ('dtstart' or 'dtend').
+
+        Returns:
+            Optional[pd.Timestamp]: Date of the event or None if not found.
+        """
+        date = (
+            pd.to_datetime(event.get(key).dt, errors="coerce")
+            .tz_convert(geneva_tz)
+            .tz_localize(None)
+        )
+        if pd.isnull(date):
+            LOGGER.error(
+                "⚠️ Missing or invalid %s date for event '%s'. Not writing it in calendar dataframe ⚠️",
+                "start" if key == "dtstart" else "end",
+                event.get("summary"),
+            )
+            return None
+        return date
+
+    def _get_date_start_from_event(self, event: Component) -> Optional[pd.Timestamp]:
+        """Extracts the start date from an event.
+
+        Args:
+            event (Component): Event to extract the start date from.
+
+        Returns:
+            Optional[pd.Timestamp]: Start date of the event or None if not found.
+        """
+        return self._get_date_from_event(event, "dtstart")
+
+    def _get_date_end_from_event(self, event: Component) -> Optional[pd.Timestamp]:
+        """Extracts the end date from an event.
+
+        Args:
+            event (Component): Event to extract the end date from.
+
+        Returns:
+            Optional[pd.Timestamp]: End date of the event or None if not found.
+        """
+        return self._get_date_from_event(event, "dtend")
+
+    def clean_event(self, event: Component) -> Optional[Dict[str, Any]]:
+        """Cleans an event from the calendar.
+
+        Args:
+            event (Component): Event to clean.
+
+        Returns:
+            Dict[str, Any]: Cleaned event.
+        """
+        return {
+            "name": self._get_name_from_event(event),
+            "location": self._get_location_from_event(event),
+            "headcount": self._get_headcount_from_event(event),
+            "date_start": self._get_date_start_from_event(event),
+            "date_end": self._get_date_end_from_event(event),
+        }
 
     def fetch_raw_calendar_data(self) -> pd.DataFrame:
         """Fetch calendar data from URL and process it."""
@@ -43,21 +163,20 @@ class InfomaniakCalendar(DataManager):
                     component.get("dtstart").dt, errors="coerce"
                 ).tz_convert(geneva_tz)
                 if date_start > pd.Timestamp.now(tz=geneva_tz):
-                    events_data.append(
-                        {
-                            "name": str(component.get("summary")),
-                            "location": str(component.get("location")).split(
-                                ",", maxsplit=1
-                            )[0],
-                            "headcount": int(component.get("description")),
-                            "date_start": date_start.tz_localize(None),
-                            "date_end": pd.to_datetime(
-                                component.get("dtend").dt, errors="coerce"
-                            )
-                            .tz_convert(geneva_tz)
-                            .tz_localize(None),
-                        }
-                    )
+                    clean_event = self.clean_event(component)
+                    if clean_event is None:
+                        LOGGER.error(
+                            "Failed to clean event: %s", component.get("summary")
+                        )
+                        continue
+                    if None not in clean_event.values():
+                        events_data.append(clean_event)
+                    else:
+                        LOGGER.warning(
+                            "Event '%s' has missing values and will be skipped.",
+                            component.get("summary"),
+                        )
+
         for event in events_data:
             event["uid"] = self._generate_unique_id(
                 name=event["name"],
@@ -83,7 +202,7 @@ class InfomaniakCalendar(DataManager):
                         col,
                     )
 
-        return df.dropna(axis=0, how="any")
+        return df.dropna(axis=1, how="any")
 
     def _handle_duplicate_names(self, df: pd.DataFrame) -> pd.DataFrame:
         """Handle duplicate event names by appending a counter in chronological order."""
