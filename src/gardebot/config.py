@@ -36,8 +36,10 @@ API_CONFIG: ApiConfigType = {
     "api_key": _load_secret("API_KEY"),
 }
 
-# GROUP_ID_GARDE_ET_PIQUET = "120363402596282813@g.us"
-GROUP_ID_GARDE_ET_PIQUET = "41782611429"
+# GROUP_ID_GARDE_ET_PIQUET = "120363402596282813@g.us" # PROD ID POUR LE GROUPE DES GARDES
+GROUP_ID_GARDE_ET_PIQUET = (
+    "120363417540870860@g.us"  # TEST ID POUR LE GROUPE DES GARDES
+)
 
 
 class ServerConfigType(TypedDict):
@@ -83,17 +85,17 @@ WEEKDAYS_FR = {
 
 TIME_BEFORE_PUBLICATION_DAY = 21
 EM_NAME = [
-    "Vadim Harych",
-    "David Gori",
+    # "Vadim Harych",
+    # "David Gori",
     "Julien Haefelin",
-    "Louis Bretton",
-    "Jean-Seb Fourier",
-    "Damien Neuenschwander",
-    "Liberto Christophe",
-    "Vincent Vuillemier",
-    "Eilean Rieder",
-    "Lionel Bidaux",
-    "Christophe Zurn",
+    # "Louis Bretton",
+    # "Jean-Seb Fourier",
+    # "Damien Neuenschwander",
+    # "Liberto Christophe",
+    # "Vincent Vuillemier",
+    # "Eilean Rieder",
+    # "Lionel Bidaux",
+    # "Christophe Zurn",
     "eSim Swisscom",
 ]
 MAX_NB_REMINDER = 3
