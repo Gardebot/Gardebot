@@ -388,6 +388,20 @@ async = ["asgiref (>=3.2)"]
 dotenv = ["python-dotenv"]
 
 [[package]]
+name = "holidays"
+version = "0.81"
+description = "Open World Holidays Framework"
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "holidays-0.81-py3-none-any.whl", hash = "sha256:1c6657ff50aa760c9503610ad5e81612ae2457d2b70a2291ca61637c938ba919"},
+    {file = "holidays-0.81.tar.gz", hash = "sha256:d4eb4624f5a0a1d6c8f9577f0b6d028d610fedf610c0aeb4942e8730ba090a55"},
+]
+
+[package.dependencies]
+python-dateutil = "*"
+
+[[package]]
 name = "http-exceptions"
 version = "0.2.10"
 description = "Raisable HTTP Exceptions"
@@ -1687,4 +1701,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "~3.11"
-content-hash = "1a6f4cc010c712c5aeeeafd29ba89214989ca11f7f941cdb8acfebb3e0128914"
+content-hash = "168de96888196eba6a80ec217f3cb2075675eeacafd4b5bbfd6f8d1b9e1ad0c7"

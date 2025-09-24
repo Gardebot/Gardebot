@@ -20,6 +20,7 @@ pyarrow = "^21.0.0"
 icalendar = "^6.3.1"
 regex = "^2025.9.18"
 apscheduler = "^3.11.0"
+holidays = "^0.81"
 
 [tool.poetry.group.dev.dependencies]
 black = "~24"                                       # The uncompromising code formatter.
