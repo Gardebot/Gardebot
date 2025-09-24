@@ -135,7 +135,9 @@ class MessageRequest(WahaRequest):
         """Test if the poll have reached the maximum number of reminders."""
         data_manager = DataManager()
         poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
-        if poll_df.loc[poll_string, "nb_reminder"] >= MAX_NB_REMINDER:
+        if (
+            poll_df.loc[poll_string, "nb_reminder"] >= MAX_NB_REMINDER
+        ):  # pyright: ignore[reportOperatorIssue]
             return True
         return False
 

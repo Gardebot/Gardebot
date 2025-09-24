@@ -72,8 +72,8 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         vote_df = vote_manager.load_dataframe("votes")
         poll_df = vote_manager.load_dataframe("polls").set_index("poll_string")
         headcount = int(
-            poll_df.loc[poll_string, "headcount"]
-        )  # pyright: ignore[reportArgumentType]
+            poll_df.loc[poll_string, "headcount"]  # pyright: ignore[reportArgumentType]
+        )
         on_duty = vote_df[vote_df[poll_string] == True].index.tolist()
         nb_to_nominate = headcount - len(on_duty)
         if vote_manager.test_poll_completion(poll_string, vote_df):
