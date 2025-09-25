@@ -249,6 +249,7 @@ class MessageRequest(WahaRequest):
             poll_df.at[
                 poll_string, "nb_reminder"
             ] += 1  # pyright: ignore[reportOperatorIssue]
+            data_manager.save_dataframe(poll_df.reset_index(), "polls")
 
         return reminder_payload
 

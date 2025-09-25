@@ -97,7 +97,9 @@ class VoteManager(DataManager):
         sapeur_availability_score = (
             vote_df[poll_string].map({True: 1, False: 1}).fillna(0)
         )
-        score_pro_sapeur = sapeur_availability_score + sapeur_participation_rate
+        score_pro_sapeur = (
+            sapeur_availability_score + sapeur_participation_rate
+        ) * 0.5  # normalized between 0 and 1
         score_pro_sapeur = score_pro_sapeur.loc[sapeur_list_name].sort_values(
             ascending=True
         )
