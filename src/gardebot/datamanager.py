@@ -15,7 +15,7 @@ LOGGER = logging.getLogger(__name__)
 class DataManager(ABC):
     """Handles file operations for the subclasses."""
 
-    def __init__(self) -> None:
+    def __init__(self, filename: str) -> None:
         """Initializes the DataManager with a for file operations on Kdrive."""
         load_dotenv(dotenv_path="credentials.env", override=True)
         for var in ["KDRIVE_USER", "KDRIVE_PWD", "KDRIVE_ID", "KDRIVE_FOLDER"]:
@@ -25,6 +25,7 @@ class DataManager(ABC):
         self.kdrive_folder = os.environ.get("KDRIVE_FOLDER")
         self.kdrive_user = os.environ.get("KDRIVE_USER")
         self.kdrive_pwd = os.environ.get("KDRIVE_PWD")
+        self.filename = filename
 
     def load_dataframe(self, filename: str) -> pd.DataFrame:
         """Load the dataframe from file or create it if not found."""
@@ -61,7 +62,7 @@ class DataManager(ABC):
 
     def save_dataframe(self, df: pd.DataFrame, filename: str) -> None:
         """Save the calendar dataframe as CSV and Parquet in Kdrive."""
-        LOGGER.info("Saving DataFrame to Kdrive as CSV and Parquet: %s", filename)
+        LOGGER.debug("Saving DataFrame to Kdrive as CSV and Parquet: %s", filename)
         self.save_dataframe_as_parquet(df, filename)
         try:
             self.save_dataframe_as_csv(df, filename)
@@ -135,3 +136,37 @@ class DataManager(ABC):
                 response.status_code,
                 response.text,
             )
+
+    def synch_dataframe(
+        self, old_df: pd.DataFrame, new_df: pd.DataFrame, key: str
+    ) -> None:
+        """Update the dataframe in Kdrive."""
+        if key not in new_df.columns:
+            LOGGER.warning(
+                "Key %s not in new dataframe columns %s. Cannot synch.",
+                key,
+                new_df.columns,
+            )
+            self.save_dataframe(old_df, self.filename)
+            return None
+        if key not in old_df.columns:
+            LOGGER.warning(
+                "Key %s not in old dataframe columns %s. Cannot synch.",
+                key,
+                old_df.columns,
+            )
+            self.save_dataframe(new_df, self.filename)
+            return None
+        input_df = new_df[~new_df[key].isin(old_df[key])]
+        if input_df.empty:
+            LOGGER.debug("No new data to update in %s.", self.filename)
+            self.save_dataframe(old_df, self.filename)
+            return None
+        updated_df = pd.concat([old_df, input_df], ignore_index=True)
+        self.save_dataframe(updated_df, self.filename)
+        LOGGER.debug(
+            "New data found and saved in %s: %s",
+            self.filename,
+            input_df.to_dict(orient="records"),
+        )
+        return None
