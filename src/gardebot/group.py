@@ -7,10 +7,10 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
+import requests  # type: ignore[import-untyped]
 
 from gardebot.config import API_CONFIG, GROUP_ID_GARDE_ET_PIQUET
 from gardebot.contact import ContactRequest
-from gardebot.datamanager import DataManager
 from gardebot.request import WahaRequest
 
 LOGGER = logging.getLogger(__name__)
@@ -55,6 +55,27 @@ class GroupRequest(WahaRequest):
         except Exception as exc:
             LOGGER.exception("Error fetching participants: %s", exc)
             return None
+
+    def refresh_group_server(self) -> requests.Response:
+        """Trigger a refresh of the group data on the WAHA server."""
+        endpoint = f"/api/{self.session}/groups/refresh"
+        try:
+            response = self.send_post_request(endpoint=endpoint, payload={})
+            if self._is_success(response.status_code):
+                LOGGER.info(
+                    "Group refresh initiated successfully for group %s", self.group_id
+                )
+                return response
+            LOGGER.error(
+                "Failed to refresh group %s (%s): %s",
+                self.group_id,
+                response.status_code,
+                response.text,
+            )
+            return response
+        except Exception as exc:
+            LOGGER.exception("Error refreshing group: %s", exc)
+            return self._sent_error_response(exc)
 
     def get_groups(
         self,
@@ -125,57 +146,6 @@ class GroupRequest(WahaRequest):
         df = pd.DataFrame(contact_info_list)
         df["joined_date"] = pd.Timestamp.now(tz="Europe/Zurich")
         df["group_id"] = self.group_id
+        df.rename(columns={"id": "uid"}, inplace=True)
 
         return df
-
-    def sync_whatsapp_group_participants(
-        self,
-    ) -> None:
-        """Fetch and format a table of group participants with contact info."""
-        data_manager = DataManager()
-        actual_participants_df = self.fetch_group_participants_table()
-        participants_in_database_df = data_manager.load_dataframe("sapeurs")
-        if participants_in_database_df.empty:
-            LOGGER.info(
-                "No existing participants in database. Saved current participants."
-            )
-            data_manager.save_dataframe(actual_participants_df, "sapeurs")
-            return None
-
-        if actual_participants_df["id"].equals(participants_in_database_df["id"]):
-            LOGGER.info("No changes in group %s participants.", self.group_id)
-            return None
-
-        left_group_mask = ~participants_in_database_df["id"].isin(
-            actual_participants_df["id"]
-        )
-        join_group_mask = ~actual_participants_df["id"].isin(
-            participants_in_database_df["id"]
-        )
-        new_members = actual_participants_df[join_group_mask]
-        if join_group_mask.any():
-            LOGGER.info(
-                "Members who joined the group %s: %s",
-                self.group_id,
-                new_members[["id", "name", "phone"]].to_dict(orient="records"),
-            )
-
-        updated_df = pd.concat(
-            [participants_in_database_df[~left_group_mask], new_members],
-            ignore_index=True,
-        )
-        data_manager.save_dataframe(updated_df, "group_participants")
-        return None
-
-    def compare_poll_publication_vs_entry_date(self, poll_string: str) -> List[str]:
-        """Compare the publication date of polls to the entry date in the group for a member."""
-        data_manager = DataManager()
-        sapeur_df = data_manager.load_dataframe("sapeurs").set_index("name")
-        poll_df = data_manager.load_dataframe("polls").set_index("poll_string")
-        publication_date = poll_df.loc[poll_string, "published_date"]
-        if sapeur_df.empty or poll_df.empty:
-            LOGGER.error("Sapeur or poll dataframe could not be loaded.")
-        mask = sapeur_df["joined_date"] <= publication_date
-        filtered_names: List[str] = sapeur_df[mask].index.tolist()
-
-        return filtered_names

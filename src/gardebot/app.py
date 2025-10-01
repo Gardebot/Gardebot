@@ -47,16 +47,17 @@ def webhook() -> tuple[Response, int]:
             gardebot.process_vote(data)
         elif "session.status" in data.get("event"):
             if "WORKING" in data.get("payload").get("status"):
-                LOGGER.debug("Session is now WORKING")
+                LOGGER.info("Session is now WORKING")
                 gardebot.initialize()
         elif "group.v2.participants" in data.get("event"):
             LOGGER.info(
                 "Group participants changed, synching participants in %ss.",
                 SERVER_CONFIG["postpone_sync_time"],
             )
+
             threading.Timer(
                 SERVER_CONFIG["postpone_sync_time"],
-                gardebot.sync_whatsapp_group_participants,
+                gardebot.update_sapeurs,
             ).start()
         else:
             LOGGER.info("Unhandled webhook data shape: %s", data)

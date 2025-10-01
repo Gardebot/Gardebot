@@ -161,3 +161,4 @@ dependency-check-report.*
 *.env
 *.txt
 credentials/
+.sessions/
