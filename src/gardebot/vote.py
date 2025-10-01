@@ -45,7 +45,7 @@ class Vote:
         return self.voter_name
 
     def get_vote(self) -> Optional[str]:
-        """Get the vote of the vote."""
+        """Get the vote value."""
         return self.vote
 
     def set_attr(self, attr: str, value: Any) -> None:
