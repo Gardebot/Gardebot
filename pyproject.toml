@@ -21,6 +21,9 @@ icalendar = "^6.3.1"
 regex = "^2025.9.18"
 apscheduler = "^3.11.0"
 holidays = "^0.81"
+pydantic = "^2.11.9"
+structlog = "^25.4.0"
+prometheus-client = "^0.23.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "~24"                                       # The uncompromising code formatter.

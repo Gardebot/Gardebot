@@ -3,74 +3,72 @@
 # pylint: disable=broad-exception-caught
 from __future__ import annotations
 
-import logging
-import threading
+from flask import Flask, jsonify, request
+from requests import Response  # type: ignore[import-untyped]
 
-from flask import Flask, Response, jsonify, request
-
-from gardebot.config import API_CONFIG, SERVER_CONFIG
+from gardebot.common.logging_configuration import configure_logging, get_logger
 from gardebot.gardebot import Gardebot
+from gardebot.settings import settings
 
-LOGGER = logging.getLogger(__name__)
-
-app = Flask(__name__)
-
-WAHA_BASE_URL = str(API_CONFIG.get("base_url", "http://waha:3000"))
-WAHA_SESSION = str(API_CONFIG.get("session", "default"))
-
-
-@app.route("/health", methods=["GET"])
-def health_check() -> tuple[Response, int]:
-    """Simple health check endpoint."""
-    return jsonify({"status": "ok"}), 200
+configure_logging(
+    level=settings.logging.level,
+    json_logs=bool(settings.logging.json()),
+    color=settings.logging.color,
+    timestamps=settings.logging.timestamps,
+)
+LOGGER = get_logger(__name__)
 
 
-@app.route("/webhook", methods=["GET", "POST"])
-def webhook() -> tuple[Response, int]:
-    """Handle incoming webhook events from WAHA (messages / statuses)."""
-    gardebot = Gardebot()
-    if request.method == "GET":
-        LOGGER.info("Received verification/ping request on /webhook")
+def create_app() -> Flask:
+    """Create and configure the Flask application."""
+    app = Flask(__name__)
+
+    @app.route("/health", methods=["GET"])
+    def health() -> tuple[Response, int]:
+        """Simple health check endpoint."""
         return jsonify({"status": "ok"}), 200
 
-    try:
+    @app.route("/webhook", methods=["GET", "POST"])
+    def webhook() -> tuple[Response, int]:
+        """Handle incoming webhook events from WAHA (messages / statuses)."""
+        bot = Gardebot()
+        if request.method == "GET":
+            LOGGER.info("webhook_ping")
+            return jsonify({"status": "ok"}), 200
+
         data = request.get_json(silent=True)
         if data is None:
-            LOGGER.warning("Received empty or invalid JSON on /webhook")
-            return jsonify({"status": "error", "message": "Invalid JSON"}), 400
+            LOGGER.warning("invalid_json")
+            return jsonify({"status": "error", "message": "invalid_json"}), 400
 
-        LOGGER.debug("Raw webhook payload: %r", data)
+        event = data.get("event")
+        LOGGER.debug("incoming_event", event=event)
+        try:
+            # Temporary original logic (dispatcher will replace later)
+            event = data.get("event")
+            if event and "message" in event:
+                bot.process_messages(data)
+            elif event and "poll.vote" in event:
+                bot.process_vote(data)
+            elif event and "session.status" in event:
+                payload = data.get("payload") or {}
+                if "WORKING" in payload.get("status", ""):
+                    bot.initialize()
+            elif event and "group.v2.participants" in event:
+                bot.update_sapeurs()
+            else:
+                LOGGER.info("unhandled_event", extra={"event": event})
+            return jsonify({"status": "success"}), 200
+        except Exception as exc:
+            LOGGER.exception("webhook_error", error=str(exc))
+            return jsonify({"status": "error", "message": "internal_error"}), 500
 
-        if "message" in data.get("event"):
-            gardebot.process_messages(data)
-        elif "poll.vote" in data.get("event"):
-            gardebot.process_vote(data)
-        elif "session.status" in data.get("event"):
-            if "WORKING" in data.get("payload").get("status"):
-                LOGGER.info("Session is now WORKING")
-                gardebot.initialize()
-        elif "group.v2.participants" in data.get("event"):
-            LOGGER.info(
-                "Group participants changed, synching participants in %ss.",
-                SERVER_CONFIG["postpone_sync_time"],
-            )
-
-            threading.Timer(
-                SERVER_CONFIG["postpone_sync_time"],
-                gardebot.update_sapeurs,
-            ).start()
-        else:
-            LOGGER.info("Unhandled webhook data shape: %s", data)
-
-        return jsonify({"status": "success"}), 200
-    except Exception as exc:
-        LOGGER.exception("Error processing webhook: %s", exc)
-        return jsonify({"status": "error", "message": str(exc)}), 500
+    return app
 
 
 if __name__ == "__main__":
-    app.run(
-        host=SERVER_CONFIG["host"],
-        port=SERVER_CONFIG["port"],
-        debug=SERVER_CONFIG["debug"],
+    create_app().run(
+        host=settings.server.host,
+        port=settings.server.port,
+        debug=settings.server.debug,
     )
