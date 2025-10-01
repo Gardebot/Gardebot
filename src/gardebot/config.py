@@ -28,8 +28,8 @@ class ApiConfigType(TypedDict):
 
 
 API_CONFIG: ApiConfigType = {
-    "base_url": "http://waha:3000",
-    "timeout": 10,  # Request timeout in seconds
+    "base_url": "http://waha:3000",  # TODO switch to prod when needed
+    "timeout": 30,  # Request timeout in seconds
     "retry_attempts": 3,
     "backoff_factor": 0.5,
     "session": "default",
@@ -37,9 +37,18 @@ API_CONFIG: ApiConfigType = {
 }
 
 # GROUP_ID_GARDE_ET_PIQUET = "120363402596282813@g.us" # PROD ID POUR LE GROUPE DES GARDES
-GROUP_ID_GARDE_ET_PIQUET = (
-    "120363417540870860@g.us"  # TEST ID POUR LE GROUPE DES GARDES
+# GROUP_ID_GARDE_ET_PIQUET = (
+#     "120363419490068226@g.us"  # TEST ID POUR PRIVATE TEST
+# )
+GROUP_ID_GARDE_ET_PIQUET = "120363417540870860@g.us"
+TIME_BEFORE_PUBLICATION_DAY = 21
+PREVENTION_DAY_BEFORE_HOLIDAY = 35
+MAX_NB_REMINDER = 7
+# MAX_NB_REMINDER = 3
+MARGIN_NOMINATION = (
+    2  # Margin for forced nomination to ensure enough people are nominated
 )
+MINIMUM_ELAPSED_HOURS = 24  # Minimum hours before sending another reminder (set to 24 to prevent spam)
 
 
 class ServerConfigType(TypedDict):
@@ -83,12 +92,10 @@ WEEKDAYS_FR = {
     6: "dimanche",
 }
 
-TIME_BEFORE_PUBLICATION_DAY = 21
-PREVENTION_DAY_BEFORE_HOLIDAY = 35
 EM_NAME = [
     # "Vadim Harych",
     # "David Gori",
-    "Julien Haefelin",
+    # "Julien Haefelin",
     # "Louis Bretton",
     # "Jean-Seb Fourier",
     # "Damien Neuenschwander",
@@ -99,4 +106,3 @@ EM_NAME = [
     # "Christophe Zurn",
     "eSim Swisscom",
 ]
-MAX_NB_REMINDER = 3
