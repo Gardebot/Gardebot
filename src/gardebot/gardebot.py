@@ -49,14 +49,14 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         self.update_gardes()
         self.update_sapeurs()
         self.initialize_vote_table()
-        self.initilize_onduty_table()
+        self.initialize_onduty_table()
 
     def initialize_vote_table(self) -> None:
         """Initialize the vote table if it does not exist."""
         vote_manager = VoteManager()
         _ = vote_manager.load_votes()
 
-    def initilize_onduty_table(self) -> None:
+    def initialize_onduty_table(self) -> None:
         """Initialize the on_duty table if it does not exist."""
         onduty_manager = OndutyManager()
         _ = onduty_manager.load_onduty()
