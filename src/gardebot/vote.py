@@ -4,107 +4,146 @@ from __future__ import annotations
 
 # pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
 import logging
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd  # type: ignore[import-untyped]
 
 from gardebot.config import EM_NAME
 from gardebot.datamanager import DataManager
+from gardebot.event import EventManager
+from gardebot.sapeur import SapeurManager
 
 LOGGER = logging.getLogger(__name__)
+
+
+class Vote:
+    """Handles a vote instance."""
+
+    def __init__(
+        self,
+        poll_string: str,
+        voter_name: str,
+        vote: Optional[str] = None,
+    ) -> None:
+        """Initialize the Vote instance."""
+        self.poll_string = poll_string
+        self.voter_name = voter_name
+        self.vote = vote
+
+    def get_attr(self, attr: str) -> Any:
+        """Get an attribute of the vote by name."""
+        if not hasattr(self, attr):
+            raise ValueError(f"Vote has no attribute {attr}.")
+        return getattr(self, attr)
+
+    def get_poll_string(self) -> str:
+        """Get the poll string of the vote."""
+        return self.poll_string
+
+    def get_voter_name(self) -> str:
+        """Get the voter name of the vote."""
+        return self.voter_name
+
+    def get_vote(self) -> Optional[str]:
+        """Get the vote of the vote."""
+        return self.vote
+
+    def set_attr(self, attr: str, value: Any) -> None:
+        """Set an attribute of the vote by attribute name."""
+        if not hasattr(self, attr):
+            raise ValueError(f"Vote has no attribute {attr}.")
+        setattr(self, attr, value)
+
+    def to_dict(self) -> Dict[str, Union[str, None]]:
+        """Convert the Vote instance to a dictionary."""
+        return {
+            "poll_string": self.poll_string,
+            "voter_name": self.voter_name,
+            "vote": self.vote,
+        }
 
 
 class VoteManager(DataManager):
     """Handles votes from the WAHA API."""
 
-    def _create_sapeur_poll_table(self) -> pd.DataFrame:
+    def __init__(self) -> None:
+        """Initialize the VoteManager instance."""
+        super().__init__(filename="votes")
+
+    def _initialize_vote_table(self) -> pd.DataFrame:
         """Create the initial votes table structure."""
-        poll_df = self.load_dataframe("polls")
-        sapeur_df = self.load_dataframe("sapeurs")
-        if poll_df is None or sapeur_df is None:
-            LOGGER.error("Poll or sapeur dataframe could not be loaded.")
+        poll_string_list = EventManager().load_gardes()["poll_string"].tolist()
+        sapeur_list = SapeurManager().load_sapeurs()["name"].tolist()
 
-        result_df = pd.DataFrame(
-            columns=poll_df["poll_string"].tolist(), index=sapeur_df["name"].tolist()
-        )
+        return pd.DataFrame(columns=poll_string_list, index=sapeur_list)
 
-        return result_df
-
-    def update_votes(self, poll_string: str, name: str, vote: Optional[str]) -> None:
-        """Update votes in the votes table with a given vote."""
-        vote_df = self.load_dataframe("votes")
+    def load_votes(self) -> pd.DataFrame:
+        """Load the votes table from the database."""
+        vote_df = self.load_dataframe(self.filename)
         if vote_df.empty:
-            vote_df = self._create_sapeur_poll_table()
-            self.save_dataframe(vote_df, "votes")
+            vote_df = self._initialize_vote_table()
+            self.save_votes(vote_df)
+        return vote_df
 
-        if vote == "Absent":
-            vote_df.at[name, poll_string] = False
-        elif vote == "Présent":
-            vote_df.at[name, poll_string] = True
-        elif vote is None:
-            vote_df.at[name, poll_string] = None
+    def save_votes(self, vote_df: pd.DataFrame) -> None:
+        """Save the votes table to the database."""
+        self.save_dataframe(vote_df, self.filename)
+
+    def update_votes(self, vote: Vote) -> None:
+        """Update votes in the votes table with a given vote."""
+        vote_df = self.load_votes()
+
+        if vote.get_vote() == "Absent":
+            vote_df.at[vote.get_voter_name(), vote.get_poll_string()] = False
+        elif vote.get_vote() == "Présent":
+            vote_df.at[vote.get_voter_name(), vote.get_poll_string()] = True
+        elif vote.get_vote() is None:
+            vote_df.at[vote.get_voter_name(), vote.get_poll_string()] = None
         else:
-            LOGGER.error("Vote %s not recognized", vote)
-        self.save_dataframe(vote_df, "votes")
+            LOGGER.error("Vote %s not recognized", vote.get_vote())
+        self.save_votes(vote_df)
 
-    def update_on_duty(
-        self, poll_string: str, on_duty_name: Union[str, List[str]]
-    ) -> None:
-        """Update the table on_duty wih the given name for the given poll_string."""
-        on_duty_df = self.load_dataframe("on_duty")
-        if on_duty_df.empty:
-            on_duty_df = self._create_sapeur_poll_table()
-            self.save_dataframe(on_duty_df, "on_duty")
+    def test_garde_completion(self, poll_string: str) -> bool:
+        """Test if the garde have enough people."""
+        vote_df = self.load_votes()
+        event_manager = EventManager()
+        garde = event_manager.get_garde_by_pollstring(poll_string)
 
-        if isinstance(on_duty_name, List):
-            for name in on_duty_name:
-                on_duty_df.at[name, poll_string] = True
-        else:
-            on_duty_df.at[on_duty_name, poll_string] = True
-
-        self.save_dataframe(on_duty_df, "on_duty")
-
-    def test_poll_completion(self, poll_string: str, vote_df: pd.DataFrame) -> bool:
-        """Test if the poll have enough people."""
-        poll_df = self.load_dataframe("polls").set_index("poll_string")
-        if vote_df[poll_string].sum() >= poll_df.loc[poll_string, "headcount"]:
+        if vote_df[poll_string].sum() >= garde.get_headcount():
             return True
         return False
 
-    def force_nomination(
-        self, sapeur_list_name: List[str], nb_to_nominate: int, poll_string: str
-    ) -> Optional[List[str]]:
-        """Nominate nb_to_nominate people in the sapeur_list_name, based on their overall participations and answer."""
-        for etat_major in EM_NAME:
-            if etat_major in sapeur_list_name:
-                LOGGER.debug(
-                    "Removing %s from the nomination list as part of the Etat Major.",
-                    etat_major,
-                )
-                sapeur_list_name.remove(etat_major)
-        if len(sapeur_list_name) == nb_to_nominate:
-            return sapeur_list_name
-        if len(sapeur_list_name) < nb_to_nominate:
-            LOGGER.error(
-                "Not enough people to nominate %s in %s",
-                nb_to_nominate,
-                sapeur_list_name,
-            )
-            return None
-        vote_df = self.load_dataframe("votes")
-        on_duty_df = self.load_dataframe("on_duty")
-        sapeur_participation_rate = on_duty_df.fillna(0).mean(axis=1)
-        sapeur_availability_score = (
-            vote_df[poll_string].map({True: 1, False: 1}).fillna(0)
-        )
-        score_pro_sapeur = (
-            sapeur_availability_score + sapeur_participation_rate
-        ) * 0.5  # normalized between 0 and 1
-        score_pro_sapeur = score_pro_sapeur.loc[sapeur_list_name].sort_values(
-            ascending=True
-        )
-        on_duty_by_force: List[str] = score_pro_sapeur.iloc[
-            :nb_to_nominate
+    def test_all_voted(self, poll_string: str) -> bool:
+        """Test if all sapeurs have voted."""
+        vote_df = self.load_votes()
+        tmp_sapeur_name_who_did_not_answered = vote_df[
+            vote_df[poll_string].isnull()
         ].index.tolist()
+        sapeur_name_who_did_not_answered = [
+            name for name in tmp_sapeur_name_who_did_not_answered if name not in EM_NAME
+        ]
 
-        return on_duty_by_force
+        if len(sapeur_name_who_did_not_answered) == 0:
+            LOGGER.info("All sapeurs have voted for poll %s", poll_string)
+            return True
+        return False
+
+    def get_present_list(self, poll_string: str) -> List[str]:
+        """Get the list of sapeurs who voted present for a given poll."""
+        vote_df = self.load_votes()
+        present_list: List[str] = vote_df[vote_df[poll_string] is True].index.tolist()
+        return present_list
+
+    def get_absent_list(self, poll_string: str) -> List[str]:
+        """Get the list of sapeurs who voted absent for a given poll."""
+        vote_df = self.load_votes()
+        absent_list: List[str] = vote_df[vote_df[poll_string] is False].index.tolist()
+        return absent_list
+
+    def get_non_responding_list(self, poll_string: str) -> List[str]:
+        """Get the list of sapeurs who did not respond for a given poll."""
+        vote_df = self.load_votes()
+        non_responding_list: List[str] = vote_df[
+            vote_df[poll_string].isnull()
+        ].index.tolist()
+        return non_responding_list
