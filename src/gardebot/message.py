@@ -138,6 +138,7 @@ class MessageRequest(WahaRequest):
 
         if len(payload["mentions"]) == 0:
             LOGGER.info("No reminder to send for poll %s", poll_string)
+            return
         try:
             response = self.send_post_request(endpoint="/api/sendText", payload=payload)
             if self._is_success(response.status_code):
