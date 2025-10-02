@@ -118,9 +118,7 @@ class SapeurManager(DataManager):
             name=str(sapeur_dict["name"]),
             pushname=str(sapeur_dict["pushname"]),
             phone=str(sapeur_dict["phone"]),
-            joined_date=sapeur_dict[
-                "joined_date"
-            ],  # pyright: ignore[reportArgumentType]
+            joined_date=sapeur_dict["joined_date"],  # pyright: ignore[reportArgumentType]
             group_id=str(sapeur_dict["group_uid"]),
         )
 
@@ -173,9 +171,7 @@ class SapeurManager(DataManager):
 
         return sapeur
 
-    def filter_sapeurs_by_joined_date(
-        self, threshold_date: pd.Timestamp
-    ) -> pd.DataFrame:
+    def filter_sapeurs_by_joined_date(self, threshold_date: pd.Timestamp) -> pd.DataFrame:
         """Filter sapeurs by joined date.
 
         Arguments:

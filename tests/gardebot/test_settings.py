@@ -17,7 +17,6 @@ class TestSettings(unittest.TestCase):
     def test_default_settings(self) -> None:
         # Force a reload of settings module
         if "gardebot.settings" in globals():
-
             sys.modules.pop("gardebot.settings", None)
 
         self.assertEqual(settings_mod.settings.server.port, 5000)

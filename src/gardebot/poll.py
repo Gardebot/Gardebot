@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
 # pyright: ignore[reportAttributeAccessIssue]
 import logging
 from datetime import datetime
@@ -43,9 +42,7 @@ class PollRequest(WahaRequest):
             tmp_voter_id = payload.get("_data").get("Info").get("SenderAlt")
             voter_id = tmp_voter_id.split("@")[0] + "@c.us"
             voter = sapeur_manager.get_sapeur_by_uid(voter_id).get_name()
-            poll_string: str = event_manager.get_gardes_by_polluid(
-                payload.get("poll").get("id")
-            ).get_poll_string()
+            poll_string: str = event_manager.get_gardes_by_polluid(payload.get("poll").get("id")).get_poll_string()
             if on_duty_manager.test_assigned(poll_string=poll_string):
                 LOGGER.debug("Le poll %s a déjà été traité.", poll_string)
                 return None
@@ -110,11 +107,7 @@ class PollRequest(WahaRequest):
                 LOGGER.debug("Le poll %s a déjà été traité.", row["poll_string"])
                 continue
 
-            if (
-                pd.isna(garde.get_published_date())
-                and garde.get_scheduled_publication_date().date()
-                <= datetime.now().date()
-            ):
+            if pd.isna(garde.get_published_date()) and garde.get_scheduled_publication_date().date() <= datetime.now().date():
                 response = self.send_poll(
                     to_conv=GROUP_ID_GARDE_ET_PIQUET,
                     poll_title=garde.get_title(),
@@ -127,6 +120,4 @@ class PollRequest(WahaRequest):
                     event_manager.update_gardes(garde)
                     LOGGER.info("Poll published and marked as published in the table.")
                 else:
-                    LOGGER.error(
-                        "Failed to publish poll for event: %s", row["poll_string"]
-                    )
+                    LOGGER.error("Failed to publish poll for event: %s", row["poll_string"])

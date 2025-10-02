@@ -1,7 +1,5 @@
 """Module for managing events and their synchronization with an external calendar."""
 
-# pylint: disable=too-many-instance-attributes, too-many-arguments
-
 import hashlib
 import logging
 from datetime import datetime, timedelta
@@ -26,7 +24,7 @@ geneva_tz = pytz.timezone("Europe/Zurich")
 class Event:
     """Handles event object."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         title: str,
         location: str,
@@ -67,9 +65,7 @@ class Event:
     def _init_uid(self) -> str:
         """Generate a unique identifier (UID) based on event details."""
         end_date_str = self.end_date.isoformat()
-        unique_string = (
-            f"{self.title}{self.location}{self.start_date.isoformat()}{end_date_str}"
-        )
+        unique_string = f"{self.title}{self.location}{self.start_date.isoformat()}{end_date_str}"
 
         uid = hashlib.sha256(unique_string.encode()).hexdigest()
         return uid
@@ -292,36 +288,28 @@ class EventManager(DataManager):
         garde_ser = self.load_gardes().set_index("uid").loc[uid]
         if garde_ser.empty:
             raise ValueError(f"Garde with uid {uid} not found.")
-        return self.from_dict(
-            garde_ser.to_dict()
-        )  # pyright: ignore[reportArgumentType]
+        return self.from_dict(garde_ser.to_dict())  # pyright: ignore[reportArgumentType]
 
     def get_garde_by_pollstring(self, poll_string: str) -> Event:
         """Get a garde by its poll string."""
         garde_ser = self.load_gardes().set_index("poll_string").loc[poll_string]
         if garde_ser.empty:
             raise ValueError(f"Garde with poll_string {poll_string} not found.")
-        return self.from_dict(
-            garde_ser.to_dict()
-        )  # pyright: ignore[reportArgumentType]
+        return self.from_dict(garde_ser.to_dict())  # pyright: ignore[reportArgumentType]
 
     def get_gardes_by_polluid(self, poll_uid: str) -> Event:
         """Get gardes by its poll UID."""
         garde_ser = self.load_gardes().set_index("poll_uid").loc[poll_uid]
         if garde_ser.empty:
             raise ValueError(f"Garde with poll_uid {poll_uid} not found.")
-        return self.from_dict(
-            garde_ser.to_dict()
-        )  # pyright: ignore[reportArgumentType]
+        return self.from_dict(garde_ser.to_dict())  # pyright: ignore[reportArgumentType]
 
     def get_gardes_by_admin_poll_uid(self, admin_poll_uid: str) -> Event:
         """Get gardes by its admin poll UID."""
         garde_ser = self.load_gardes().set_index("admin_poll_uid").loc[admin_poll_uid]
         if garde_ser.empty:
             raise ValueError(f"Garde with admin_poll_uid {admin_poll_uid} not found.")
-        return self.from_dict(
-            garde_ser.to_dict()
-        )  # pyright: ignore[reportArgumentType]
+        return self.from_dict(garde_ser.to_dict())  # pyright: ignore[reportArgumentType]
 
     def _consecutive_events(self, df: pd.DataFrame) -> pd.DataFrame:
         """Set the same publication date to consecutive events."""
@@ -330,9 +318,7 @@ class EventManager(DataManager):
             row = df.iloc[i]
             next_row = df.iloc[i + 1]
             if row["start_date"].date() == next_row["start_date"].date():
-                df.at[df.index[i + 1], "scheduled_publication_date"] = row[
-                    "scheduled_publication_date"
-                ]
+                df.at[df.index[i + 1], "scheduled_publication_date"] = row["scheduled_publication_date"]
         return df
 
     def test_is_published(self, poll_string: str) -> bool:

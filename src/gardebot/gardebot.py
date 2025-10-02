@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# pylint: disable=broad-exception-caught, protected-access, dangerous-default-value, singleton-comparison
 import logging
 import os
 import threading
@@ -97,9 +96,7 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         if payload is None:
             LOGGER.info("No payload to process with data %s.", data)
             return None
-        admin_poll_id = (
-            payload.get("poll", {}).get("id") if payload.get("poll") else None
-        )
+        admin_poll_id = payload.get("poll", {}).get("id") if payload.get("poll") else None
         garde = EventManager().get_gardes_by_admin_poll_uid(admin_poll_id)
         on_duty_manager = OndutyManager()
         poll_string = garde.get_poll_string()
@@ -107,14 +104,8 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
             LOGGER.debug("Le poll %s a déjà été traité.", poll_string)
             return None
         vote = payload.get("vote") if payload else None
-        tmp_on_duty_list: Optional[List[str]] = (
-            vote.get("selectedOptions") if vote else None
-        )
-        on_duty_list: Optional[List[str]] = (
-            [name.split(" : ")[0] for name in tmp_on_duty_list]
-            if tmp_on_duty_list
-            else None
-        )
+        tmp_on_duty_list: Optional[List[str]] = vote.get("selectedOptions") if vote else None
+        on_duty_list: Optional[List[str]] = [name.split(" : ")[0] for name in tmp_on_duty_list] if tmp_on_duty_list else None
         if on_duty_list is None:
             LOGGER.error("No on_duty_list found in admin vote payload %s", payload)
             return None
@@ -130,13 +121,9 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
             LOGGER.error("Admin selected no sapeur for poll %s. Ignoring.", poll_string)
             return None
 
-        on_duty_manager.update_on_duty(
-            poll_string=poll_string, on_duty_name=on_duty_list
-        )
+        on_duty_manager.update_on_duty(poll_string=poll_string, on_duty_name=on_duty_list)
         self.send_convocation(poll_string=poll_string, on_duty_name=on_duty_list)
-        LOGGER.info(
-            "Admin confirmed on-duty for poll %s: %s", poll_string, on_duty_list
-        )
+        LOGGER.info("Admin confirmed on-duty for poll %s: %s", poll_string, on_duty_list)
         return None
 
     def process_vote_from_group(self, data: Dict[str, Any]) -> None:
@@ -174,16 +161,12 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         """Process actions to take when a poll is complete."""
         vote_manager = VoteManager()
         event_manager = EventManager()
-        on_duty = dict.fromkeys(
-            vote_manager.get_present_list(poll_string=poll_string), 1.0
-        )
+        on_duty = dict.fromkeys(vote_manager.get_present_list(poll_string=poll_string), 1.0)
         if vote_manager.test_garde_completion(poll_string=poll_string):
             message = f"Le poll {poll_string} est complet avec {len(on_duty)} sapeurs: {on_duty}"
             LOGGER.info(message)
             self._ask_confirmation_to_admin(
-                headcount=event_manager.get_garde_by_pollstring(
-                    poll_string
-                ).get_headcount(),
+                headcount=event_manager.get_garde_by_pollstring(poll_string).get_headcount(),
                 poll_string=poll_string,
                 potential_on_duty=on_duty,
             )
@@ -195,9 +178,7 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         on_duty_manager = OndutyManager()
 
         garde = event_manager.get_garde_by_pollstring(poll_string)
-        tmp_on_duty = dict.fromkeys(
-            vote_manager.get_present_list(poll_string=poll_string), 1.0
-        )
+        tmp_on_duty = dict.fromkeys(vote_manager.get_present_list(poll_string=poll_string), 1.0)
         nb_to_nominate = garde.get_headcount() - len(tmp_on_duty)
 
         forced_on_duty = on_duty_manager.force_nomination(
@@ -218,9 +199,7 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         on_duty_manager = OndutyManager()
 
         garde = event_manager.get_garde_by_pollstring(poll_string)
-        tmp_on_duty = dict.fromkeys(
-            vote_manager.get_present_list(poll_string=poll_string), 1.0
-        )
+        tmp_on_duty = dict.fromkeys(vote_manager.get_present_list(poll_string=poll_string), 1.0)
         nb_to_nominate = garde.get_headcount() - len(tmp_on_duty)
         forced_on_duty = on_duty_manager.force_nomination(
             nb_to_nominate=nb_to_nominate,
@@ -234,17 +213,13 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
             potential_on_duty=tmp_on_duty,
         )
 
-    def _ask_confirmation_to_admin(
-        self, headcount: int, poll_string: str, potential_on_duty: Dict[str, float]
-    ) -> None:
+    def _ask_confirmation_to_admin(self, headcount: int, poll_string: str, potential_on_duty: Dict[str, float]) -> None:
         """Ask the admin to confirm the on-duty nominations."""
         event_manager = EventManager()
         garde = event_manager.get_garde_by_pollstring(poll_string)
-        poll_options = [
-            f"{name} : {score:.2f}" for name, score in potential_on_duty.items()
-        ]
+        poll_options = [f"{name} : {score:.2f}" for name, score in potential_on_duty.items()]
         LOGGER.info("Poll options for admin confirmation: %s", poll_options)
-        if len(poll_options) < 2:
+        if len(poll_options) < 2:  # noqa: PLR2004
             LOGGER.error("Not enough options to ask for confirmation to admin.")
             return None
         response = self.send_poll(
@@ -259,9 +234,7 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         if self._is_success(response.status_code):
             garde.set_attr("admin_poll_uid", response.json().get("id"))
             event_manager.update_gardes(garde)
-            LOGGER.info(
-                "Asked admin for confirmation on poll %s: %s", poll_string, poll_options
-            )
+            LOGGER.info("Asked admin for confirmation on poll %s: %s", poll_string, poll_options)
         else:
             LOGGER.error(
                 "Failed to send poll to admin (%s): %s",
@@ -271,19 +244,13 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         return None
 
     def _notify_admin(self, message: str) -> None:
-        self.send_text(
-            to_number=os.environ.get("ADMIN_NUMBER", ""), message_text=message
-        )
+        self.send_text(to_number=os.environ.get("ADMIN_NUMBER", ""), message_text=message)
 
     def send_holiday_warning(self) -> None:
         """Send a warning message for upcoming holidays."""
         today = pd.Timestamp.now(tz="Europe/Zurich")
-        geneva_holidays = holidays.country_holidays(
-            "CH", subdiv="GE", years=[today.year, today.year + 1]
-        )
-        upcoming_holidays = {
-            date: name for date, name in geneva_holidays.items() if date >= today.date()
-        }
+        geneva_holidays = holidays.country_holidays("CH", subdiv="GE", years=[today.year, today.year + 1])
+        upcoming_holidays = {date: name for date, name in geneva_holidays.items() if date >= today.date()}
         for date, name in sorted(upcoming_holidays.items()):
             timedelta = date - today.date()
             if timedelta.days == PREVENTION_DAY_BEFORE_HOLIDAY:

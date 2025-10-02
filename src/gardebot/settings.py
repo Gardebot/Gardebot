@@ -12,42 +12,26 @@ class ServerSettings(BaseModel):
 
     host: str = Field(default_factory=lambda: os.getenv("SERVER_HOST", "0.0.0.0"))
     port: int = Field(default_factory=lambda: int(os.getenv("SERVER_PORT", "5000")))
-    debug: bool = Field(
-        default_factory=lambda: os.getenv("SERVER_DEBUG", "false").lower() == "true"
-    )
-    postpone_sync_time: int = Field(
-        default_factory=lambda: int(os.getenv("POSTPONE_SYNC_TIME", "5"))
-    )
+    debug: bool = Field(default_factory=lambda: os.getenv("SERVER_DEBUG", "false").lower() == "true")
+    postpone_sync_time: int = Field(default_factory=lambda: int(os.getenv("POSTPONE_SYNC_TIME", "5")))
 
 
 class ApiSettings(BaseModel):
     """Settings related to the WAHA API configuration."""
 
-    base_url: AnyHttpUrl | str = Field(
-        default_factory=lambda: os.getenv("WAHA_BASE_URL", "http://waha:3000")
-    )
+    base_url: AnyHttpUrl | str = Field(default_factory=lambda: os.getenv("WAHA_BASE_URL", "http://waha:3000"))
     session: str = Field(default_factory=lambda: os.getenv("WAHA_SESSION", "default"))
-    timeout_seconds: int = Field(
-        default_factory=lambda: int(os.getenv("WAHA_TIMEOUT_SECONDS", "10"))
-    )
-    retry_attempts: int = Field(
-        default_factory=lambda: int(os.getenv("WAHA_RETRY_ATTEMPTS", "3"))
-    )
+    timeout_seconds: int = Field(default_factory=lambda: int(os.getenv("WAHA_TIMEOUT_SECONDS", "10")))
+    retry_attempts: int = Field(default_factory=lambda: int(os.getenv("WAHA_RETRY_ATTEMPTS", "3")))
 
 
 class LoggingSettings(BaseModel):
     """Settings related to logging configuration."""
 
     level: str = Field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
-    json_logs: bool = Field(
-        default_factory=lambda: os.getenv("LOG_JSON", "true").lower() == "true"
-    )
-    color: bool = Field(
-        default_factory=lambda: os.getenv("LOG_COLOR", "false").lower() == "true"
-    )
-    timestamps: bool = Field(
-        default_factory=lambda: os.getenv("LOG_TIMESTAMPS", "true").lower() == "true"
-    )
+    json_logs: bool = Field(default_factory=lambda: os.getenv("LOG_JSON", "true").lower() == "true")
+    color: bool = Field(default_factory=lambda: os.getenv("LOG_COLOR", "false").lower() == "true")
+    timestamps: bool = Field(default_factory=lambda: os.getenv("LOG_TIMESTAMPS", "true").lower() == "true")
 
 
 class AppSettings(BaseModel):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
 import logging
 import os
 from typing import Any, Dict, List, Optional, Sequence
@@ -43,9 +42,7 @@ class MessageRequest(WahaRequest):
                     to_number=from_number,
                     message_text=f"Echoing, you sent : '{body}' at {timestamp}",
                 )
-                LOGGER.info(
-                    "Processed message from %s at %s: %s", from_number, timestamp, body
-                )
+                LOGGER.info("Processed message from %s at %s: %s", from_number, timestamp, body)
             else:
                 LOGGER.debug("Ignoring message sent from myself with data %s.", data)
         except Exception as exc:
@@ -114,9 +111,7 @@ class MessageRequest(WahaRequest):
         poll_id = event_manager.get_garde_by_pollstring(poll_string).get_poll_uid()
 
         sapeur_name_to_send_reminder = [
-            name
-            for name in vote_manager.get_non_responding_list(poll_string=poll_string)
-            if name not in EM_NAME
+            name for name in vote_manager.get_non_responding_list(poll_string=poll_string) if name not in EM_NAME
         ]
 
         payload = self._get_payload_with_mention(
@@ -124,9 +119,7 @@ class MessageRequest(WahaRequest):
             name_list=sapeur_name_to_send_reminder,
             reply_to=poll_id,
         )
-        message_text = (
-            f"Bonjour, Merci à {payload['text']} de bien vouloir répondre au sondage"
-        )
+        message_text = f"Bonjour, Merci à {payload['text']} de bien vouloir répondre au sondage"
         message_text += f" - {poll_string} - attaché à ce mesage :)"
         payload["text"] = message_text
 
@@ -174,9 +167,7 @@ class MessageRequest(WahaRequest):
             LOGGER.exception("Error retrieving message: %s", exc)
             return {}
 
-    def _get_payload_with_mention(
-        self, to_number: str, name_list: List[str], reply_to: Optional[str]
-    ) -> Dict[str, Sequence[str]]:
+    def _get_payload_with_mention(self, to_number: str, name_list: List[str], reply_to: Optional[str]) -> Dict[str, Sequence[str]]:
         """Prepare payload for sending message with mentions."""
         sapeur_manager = SapeurManager()
         sapeur_list = [sapeur_manager.get_sapeur_by_name(name) for name in name_list]
@@ -193,13 +184,9 @@ class MessageRequest(WahaRequest):
             payload["reply_to"] = reply_to
         return payload
 
-    def _send_group_convocation(
-        self, to_number: str, poll_string: str, on_duty_name: List[str], poll_id: str
-    ) -> None:
+    def _send_group_convocation(self, to_number: str, poll_string: str, on_duty_name: List[str], poll_id: str) -> None:
         """Send a group convocation message using WAHA."""
-        payload = self._get_payload_with_mention(
-            to_number=to_number, name_list=on_duty_name, reply_to=poll_id
-        )
+        payload = self._get_payload_with_mention(to_number=to_number, name_list=on_duty_name, reply_to=poll_id)
         group_text = f"Merci à {payload['text']} pour la garde: {poll_string}. Vous êtes convoqué.e.s, merci pour votre engagement :)"
         payload["text"] = group_text
         try:
@@ -225,12 +212,8 @@ class MessageRequest(WahaRequest):
                 to_number=to_number,
                 event_description=event_description,
                 event_name=garde.get_title(),
-                event_start_time=int(
-                    geneva_tz.localize(garde.get_start_date()).timestamp()
-                ),
-                event_end_time=int(
-                    geneva_tz.localize(garde.get_end_date()).timestamp()
-                ),
+                event_start_time=int(geneva_tz.localize(garde.get_start_date()).timestamp()),
+                event_end_time=int(geneva_tz.localize(garde.get_end_date()).timestamp()),
                 location=garde.get_location(),
                 reply_to=garde.get_poll_uid(),
             )
@@ -254,11 +237,7 @@ class MessageRequest(WahaRequest):
             poll_id=poll_id,
         )
         for sapeur in sapeur_list:
-            self._send_private_convocation(
-                to_number=sapeur.get_phone(), poll_string=poll_string
-            )
+            self._send_private_convocation(to_number=sapeur.get_phone(), poll_string=poll_string)
 
-        LOGGER.info(
-            "Convocation send for pollstring %s to %s", poll_string, on_duty_name
-        )
+        LOGGER.info("Convocation send for pollstring %s to %s", poll_string, on_duty_name)
         return None

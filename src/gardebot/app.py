@@ -1,6 +1,5 @@
 """Main Flask application for handling WAHA webhook events and providing an internal send_text helper."""
 
-# pylint: disable=broad-exception-caught
 from __future__ import annotations
 
 from flask import Flask, jsonify, request

@@ -40,12 +40,8 @@ import structlog
 _LOGGING_ALREADY_CONFIGURED = False
 
 # Context variables (per logical request / task)
-_request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "request_id", default=None
-)
-_additional_context_var: contextvars.ContextVar[dict[str, Any]] = (
-    contextvars.ContextVar("additional_context", default={})
-)
+_request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("request_id", default=None)
+_additional_context_var: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar("additional_context", default={})
 
 VALID_LEVELS = {
     "CRITICAL": logging.CRITICAL,
@@ -70,8 +66,8 @@ def _resolve_level(level_str: str | None) -> int:
 # Processors
 # -----------------------------------------------------------------------------
 def _inject_context(
-    logger: Any,  # pylint: disable=unused-argument
-    method_name: str,  # pylint: disable=unused-argument
+    logger: Any,  # noqa: ARG001
+    method_name: str,  # noqa: ARG001
     event_dict: Dict[str, Optional[str]],
 ) -> Dict[str, Optional[str]]:
     """Processor that injects bound contextvars into the event dict."""
@@ -145,27 +141,15 @@ def configure_logging(
         color: Override LOG_COLOR (only applied when not JSON).
         timestamps: Override LOG_TIMESTAMPS (disable for performance).
     """
-    global _LOGGING_ALREADY_CONFIGURED  # pylint: disable=global-statement
+    global _LOGGING_ALREADY_CONFIGURED  # noqa: PLW0603
 
     if _LOGGING_ALREADY_CONFIGURED and not force:
         return
 
     env_level = level or os.getenv("LOG_LEVEL", "INFO")
-    env_json = (
-        json_logs
-        if json_logs is not None
-        else os.getenv("LOG_JSON", "true").lower() == "true"
-    )
-    env_color = (
-        color
-        if color is not None
-        else os.getenv("LOG_COLOR", "false").lower() == "true"
-    )
-    env_timestamps = (
-        timestamps
-        if timestamps is not None
-        else os.getenv("LOG_TIMESTAMPS", "true").lower() == "true"
-    )
+    env_json = json_logs if json_logs is not None else os.getenv("LOG_JSON", "true").lower() == "true"
+    env_color = color if color is not None else os.getenv("LOG_COLOR", "false").lower() == "true"
+    env_timestamps = timestamps if timestamps is not None else os.getenv("LOG_TIMESTAMPS", "true").lower() == "true"
 
     resolved_level = _resolve_level(env_level)
 

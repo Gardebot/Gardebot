@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
 import logging
 from typing import Any, Dict, List, Optional, Union
 
@@ -116,12 +115,8 @@ class VoteManager(DataManager):
     def test_all_voted(self, poll_string: str) -> bool:
         """Test if all sapeurs have voted."""
         vote_df = self.load_votes()
-        tmp_sapeur_name_who_did_not_answered = vote_df[
-            vote_df[poll_string].isnull()
-        ].index.tolist()
-        sapeur_name_who_did_not_answered = [
-            name for name in tmp_sapeur_name_who_did_not_answered if name not in EM_NAME
-        ]
+        tmp_sapeur_name_who_did_not_answered = vote_df[vote_df[poll_string].isnull()].index.tolist()
+        sapeur_name_who_did_not_answered = [name for name in tmp_sapeur_name_who_did_not_answered if name not in EM_NAME]
 
         if len(sapeur_name_who_did_not_answered) == 0:
             LOGGER.info("All sapeurs have voted for poll %s", poll_string)
@@ -143,7 +138,5 @@ class VoteManager(DataManager):
     def get_non_responding_list(self, poll_string: str) -> List[str]:
         """Get the list of sapeurs who did not respond for a given poll."""
         vote_df = self.load_votes()
-        non_responding_list: List[str] = vote_df[
-            vote_df[poll_string].isnull()
-        ].index.tolist()
+        non_responding_list: List[str] = vote_df[vote_df[poll_string].isnull()].index.tolist()
         return non_responding_list

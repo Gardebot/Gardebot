@@ -76,9 +76,7 @@ class TestLoggingConfiguration(unittest.TestCase):
 
     def test_disable_timestamps(self) -> None:
         with mock.patch("sys.stdout", new=io.StringIO()) as fake_out:
-            configure_logging(
-                force=True, json_logs=True, level="INFO", timestamps=False
-            )
+            configure_logging(force=True, json_logs=True, level="INFO", timestamps=False)
             logger = get_logger("no_ts")
             logger.info("no_timestamp")
             out = fake_out.getvalue().strip().splitlines()[-1]

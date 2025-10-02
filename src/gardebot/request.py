@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-# pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
 import json
 import logging
 from typing import Any, Dict, Optional
 
 import requests  # type: ignore[import-untyped]
 
-from gardebot.config import API_CONFIG
+from gardebot.config import API_CONFIG, SUCCESS_STATUS_CODE
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,9 +37,7 @@ class WahaRequest:
                 "X-Api-Key": self.api_key,
             }
 
-    def send_post_request(
-        self, endpoint: str, payload: Dict[str, Any]
-    ) -> requests.Response:
+    def send_post_request(self, endpoint: str, payload: Dict[str, Any]) -> requests.Response:
         """Send a generic API POST request to WAHA."""
         try:
             url = f"{self.base_url}{endpoint}"
@@ -80,7 +77,7 @@ class WahaRequest:
 
     def _is_success(self, status: int) -> bool:
         """Check if the status code indicates a successful response."""
-        return 200 <= status < 300
+        return SUCCESS_STATUS_CODE <= status < 300  # noqa: PLR2004
 
     def _sent_error_response(self, exc: Exception) -> requests.Response:
         """Generate a mock error response."""

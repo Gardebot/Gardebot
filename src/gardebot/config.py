@@ -45,10 +45,9 @@ TIME_BEFORE_PUBLICATION_DAY = 21
 PREVENTION_DAY_BEFORE_HOLIDAY = 35
 MAX_NB_REMINDER = 7
 # MAX_NB_REMINDER = 3
-MARGIN_NOMINATION = (
-    2  # Margin for forced nomination to ensure enough people are nominated
-)
+MARGIN_NOMINATION = 2  # Margin for forced nomination to ensure enough people are nominated
 MINIMUM_ELAPSED_HOURS = 24  # Minimum hours before sending another reminder (set to 24 to prevent spam)
+SUCCESS_STATUS_CODE = 200
 
 
 class ServerConfigType(TypedDict):
