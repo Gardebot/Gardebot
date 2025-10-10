@@ -105,7 +105,7 @@ def clear_request_id() -> None:
 
 def bind_context(**kwargs: Any) -> None:
     """Bind arbitrary contextual key/value pairs (non-destructive)."""
-    current = _additional_context_var.get().copy()
+    current = _additional_context_var.get({}).copy()
     current.update(kwargs)
     _additional_context_var.set(current)
 
