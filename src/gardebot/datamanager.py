@@ -9,6 +9,8 @@ import pandas as pd  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 from dotenv import load_dotenv
 
+from gardebot.config import SUCCESS_STATUS_CODE
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -41,10 +43,8 @@ class DataManager(ABC):
             timeout=200,
         )
 
-        if response.status_code != 200:
-            LOGGER.warning(
-                "File %s not found. Creating a new empty DataFrame.", filename
-            )
+        if response.status_code != SUCCESS_STATUS_CODE:
+            LOGGER.warning("File %s not found. Creating a new empty DataFrame.", filename)
             df = pd.DataFrame()
         else:
             df = pd.read_parquet(io.BytesIO(response.content))
@@ -66,7 +66,7 @@ class DataManager(ABC):
         self.save_dataframe_as_parquet(df, filename)
         try:
             self.save_dataframe_as_csv(df, filename)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             LOGGER.exception("Error saving DataFrame as CSV %s: %s", filename, exc)
 
     def save_dataframe_as_parquet(self, df: pd.DataFrame, filename: str) -> None:
@@ -116,9 +116,7 @@ class DataManager(ABC):
         file_url = self.generate_file_url(filename)
         LOGGER.debug("Saving DataFrame to Kdrive as %s", filename)
 
-        csv_data = df.replace(",", ";", regex=True).to_csv(
-            index=True, encoding="utf-8", sep=","
-        )
+        csv_data = df.replace(",", ";", regex=True).to_csv(index=True, encoding="utf-8", sep=",")
         response = requests.put(
             file_url,
             data=csv_data,
@@ -137,9 +135,7 @@ class DataManager(ABC):
                 response.text,
             )
 
-    def synch_dataframe(
-        self, old_df: pd.DataFrame, new_df: pd.DataFrame, key: str
-    ) -> None:
+    def synch_dataframe(self, old_df: pd.DataFrame, new_df: pd.DataFrame, key: str) -> None:
         """Update the dataframe in Kdrive."""
         if key not in new_df.columns:
             LOGGER.warning(

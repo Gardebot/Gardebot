@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
 import logging
 from typing import Dict, List, Optional, Union
 
@@ -48,9 +47,7 @@ class OndutyManager(DataManager):
             return True
         return False
 
-    def update_on_duty(
-        self, poll_string: str, on_duty_name: Union[str, List[str]]
-    ) -> None:
+    def update_on_duty(self, poll_string: str, on_duty_name: Union[str, List[str]]) -> None:
         """Update the table on_duty wih the given name for the given poll_string."""
         on_duty_df = self.load_onduty()
         if isinstance(on_duty_name, List):
@@ -73,9 +70,7 @@ class OndutyManager(DataManager):
                 retour.remove(etat_major)
         return retour
 
-    def force_nomination(
-        self, nb_to_nominate: int, poll_string: str
-    ) -> Dict[str, float]:
+    def force_nomination(self, nb_to_nominate: int, poll_string: str) -> Dict[str, float]:
         """Nominate nb_to_nominate people  based on their overall participations and answer."""
         nominated = self.nominate_within_non_responding(nb_to_nominate, poll_string)
         if len(nominated) < nb_to_nominate:
@@ -84,22 +79,14 @@ class OndutyManager(DataManager):
                 nb_to_nominate,
             )
             remaining_to_nominate = nb_to_nominate - len(nominated)
-            nominated_within_absent = self.nominate_within_absent(
-                remaining_to_nominate, poll_string
-            )
-            nominated_within_absent = {
-                k: v for k, v in nominated_within_absent.items() if k not in nominated
-            }
+            nominated_within_absent = self.nominate_within_absent(remaining_to_nominate, poll_string)
+            nominated_within_absent = {k: v for k, v in nominated_within_absent.items() if k not in nominated}
             nominated.update(nominated_within_absent)
 
-        sorted_nominated = dict(
-            sorted(nominated.items(), key=lambda item: item[1], reverse=False)
-        )
+        sorted_nominated = dict(sorted(nominated.items(), key=lambda item: item[1], reverse=False))
         return sorted_nominated
 
-    def nominate_within_non_responding(
-        self, nb_to_nominate: int, poll_string: str
-    ) -> Dict[str, float]:
+    def nominate_within_non_responding(self, nb_to_nominate: int, poll_string: str) -> Dict[str, float]:
         """Nominate people within the unanswered list."""
         vote_manager = VoteManager()
         non_responding = vote_manager.get_non_responding_list(poll_string)
@@ -113,56 +100,35 @@ class OndutyManager(DataManager):
                     non_responding,
                 )
             return dict.fromkeys(non_responding, -1.0)
-        score_pro_sapeur = self._calculate_participation_score(
-            poll_string, non_responding
-        )
+        score_pro_sapeur = self._calculate_participation_score(poll_string, non_responding)
         if score_pro_sapeur.size < nb_to_nominate + MARGIN_NOMINATION:
             sapeur_nominated: Dict[str, float] = score_pro_sapeur.to_dict()
         else:
-            sapeur_nominated = score_pro_sapeur.iloc[
-                : nb_to_nominate + MARGIN_NOMINATION
-            ].to_dict()
+            sapeur_nominated = score_pro_sapeur.iloc[: nb_to_nominate + MARGIN_NOMINATION].to_dict()
         return {k: v - 1 for k, v in sapeur_nominated.items()}
 
-    def nominate_within_absent(
-        self, nb_to_nominate: int, poll_string: str
-    ) -> Dict[str, float]:
+    def nominate_within_absent(self, nb_to_nominate: int, poll_string: str) -> Dict[str, float]:
         """Nominate people within the absent list."""
         vote_manager = VoteManager()
         absent = vote_manager.get_absent_list(poll_string)
         absent = self._filter_etat_major(absent)
         score_pro_sapeur = self._calculate_participation_score(poll_string, absent)
         if score_pro_sapeur.size < nb_to_nominate + MARGIN_NOMINATION:
-            sapeur_nominated: Dict[str, float] = score_pro_sapeur.iloc[
-                :nb_to_nominate
-            ].to_dict()
+            sapeur_nominated: Dict[str, float] = score_pro_sapeur.iloc[:nb_to_nominate].to_dict()
         else:
-            sapeur_nominated = score_pro_sapeur.iloc[
-                : nb_to_nominate + MARGIN_NOMINATION
-            ].to_dict()
+            sapeur_nominated = score_pro_sapeur.iloc[: nb_to_nominate + MARGIN_NOMINATION].to_dict()
         return sapeur_nominated
 
-    def _calculate_participation_score(
-        self, poll_string: str, potential_sapeur: Optional[List[str]] = None
-    ) -> pd.Series:
+    def _calculate_participation_score(self, poll_string: str, potential_sapeur: Optional[List[str]] = None) -> pd.Series:
         """Calculate the participation score for each sapeur in potential_sapeur."""
         vote_manager = VoteManager()
         vote_df = vote_manager.load_votes()
         onduty_df = self.load_onduty()
 
         on_duty_rate = onduty_df.infer_objects(copy=False).fillna(0).mean(axis=1)
-        vote_participation_rate = (
-            vote_df.infer_objects(copy=False).fillna(0).mean(axis=1)
-        )
-        sapeur_availability_score = (
-            vote_df[poll_string]
-            .map({True: 1, False: 1})
-            .infer_objects(copy=False)
-            .fillna(0)
-        )
-        score_pro_sapeur = (
-            sapeur_availability_score + vote_participation_rate + on_duty_rate
-        ) / 3  # normalized between 0 and 1
+        vote_participation_rate = vote_df.infer_objects(copy=False).fillna(0).mean(axis=1)
+        sapeur_availability_score = vote_df[poll_string].map({True: 1, False: 1}).infer_objects(copy=False).fillna(0)
+        score_pro_sapeur = (sapeur_availability_score + vote_participation_rate + on_duty_rate) / 3  # normalized between 0 and 1
         score_pro_sapeur.sort_values(ascending=False, inplace=True)
         if potential_sapeur is not None:
             score_pro_sapeur = score_pro_sapeur.loc[potential_sapeur]
@@ -171,7 +137,5 @@ class OndutyManager(DataManager):
     def get_on_duty_list(self, poll_string: str) -> List[str]:
         """Get the list of people who were on duty for the given poll_string."""
         on_duty_df = self.load_onduty()
-        on_duty_list: List[str] = on_duty_df[
-            ~on_duty_df[poll_string].isna()
-        ].index.tolist()
+        on_duty_list: List[str] = on_duty_df[~on_duty_df[poll_string].isna()].index.tolist()
         return on_duty_list

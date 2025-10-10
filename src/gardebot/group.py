@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -40,9 +39,7 @@ class GroupRequest(WahaRequest):
         try:
             response = self.send_get_request(endpoint=endpoint)
             if self._is_success(response.status_code):
-                LOGGER.debug(
-                    "Participants fetched successfully for group %s", self.group_id
-                )
+                LOGGER.debug("Participants fetched successfully for group %s", self.group_id)
                 participants: List[Dict[str, Any]] = response.json()
                 return participants
             LOGGER.error(
@@ -62,9 +59,7 @@ class GroupRequest(WahaRequest):
         try:
             response = self.send_post_request(endpoint=endpoint, payload={})
             if self._is_success(response.status_code):
-                LOGGER.info(
-                    "Group refresh initiated successfully for group %s", self.group_id
-                )
+                LOGGER.info("Group refresh initiated successfully for group %s", self.group_id)
                 return response
             LOGGER.error(
                 "Failed to refresh group %s (%s): %s",
@@ -108,9 +103,7 @@ class GroupRequest(WahaRequest):
                 LOGGER.info("Groups fetched successfully")
                 groups: Dict[str, Any] = response.json()
                 return groups
-            LOGGER.error(
-                "Failed to fetch groups (%s): %s", response.status_code, response.text
-            )
+            LOGGER.error("Failed to fetch groups (%s): %s", response.status_code, response.text)
             return None
         except Exception as exc:
             LOGGER.exception("Error fetching groups: %s", exc)
@@ -131,8 +124,7 @@ class GroupRequest(WahaRequest):
             LOGGER.error("No participants found for group %s", self.group_id)
             return pd.DataFrame()
         contact_id_list = [
-            "".join([char for char in contact_data["PhoneNumber"] if char.isnumeric()])
-            for contact_data in group_participants
+            "".join([char for char in contact_data["PhoneNumber"] if char.isnumeric()]) for contact_data in group_participants
         ]
 
         contact_info_list = []

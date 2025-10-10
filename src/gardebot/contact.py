@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-# pylint: disable=broad-exception-caught, protected-access, dangerous-default-value
 import logging
 from typing import Any, Dict, Optional
 
@@ -29,13 +28,9 @@ class ContactRequest(WahaRequest):
         try:
             response = self.send_get_request(endpoint=endpoint)
             if self._is_success(response.status_code):
-                LOGGER.debug(
-                    "Contact info fetched successfully for contact %s", contact_id
-                )
+                LOGGER.debug("Contact info fetched successfully for contact %s", contact_id)
                 contact_info: Dict[str, Any] = response.json()
-                contact_info["phone"] = "+" + "".join(
-                    [a for a in contact_id if a.isdigit()]
-                )  # Quick fix to add phone number
+                contact_info["phone"] = "+" + "".join([a for a in contact_id if a.isdigit()])  # Quick fix to add phone number
                 return contact_info
             LOGGER.error(
                 "Failed to fetch contact info for contactId %s (%s): %s",

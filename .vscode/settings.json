@@ -10,10 +10,14 @@
         "test*.py"
     ],
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
+    "python.envFile": "${workspaceFolder}/.env",
     "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.defaultFormatter": "charliermarsh.ruff",
         "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
+        }
     },
-    "black-formatter.importStrategy": "fromEnvironment",
-    "python.envFile": "${workspaceFolder}/credentials.env",
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true
 }

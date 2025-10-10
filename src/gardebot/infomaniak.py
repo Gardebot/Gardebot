@@ -25,9 +25,7 @@ class InfomaniakCalendar:
         """Extracts the name from an event."""
         name = event.get("summary")
         if name is None or len(name) == 0:
-            LOGGER.error(
-                "⚠️ Missing name for one of your event. Not writing it in calendar dataframe ⚠️"
-            )
+            LOGGER.error("⚠️ Missing name for one of your event. Not writing it in calendar dataframe ⚠️")
             return None
         return str(name)
 
@@ -53,15 +51,9 @@ class InfomaniakCalendar:
             return None
         return int(headcount)
 
-    def _get_date_from_event(
-        self, event: Component, key: str
-    ) -> Optional[pd.Timestamp]:
+    def _get_date_from_event(self, event: Component, key: str) -> Optional[pd.Timestamp]:
         """Extracts the date from an event."""
-        date = (
-            pd.to_datetime(event.get(key).dt, errors="coerce")
-            .tz_convert(geneva_tz)
-            .tz_localize(None)
-        )
+        date = pd.to_datetime(event.get(key).dt, errors="coerce").tz_convert(geneva_tz).tz_localize(None)
         if pd.isnull(date):
             LOGGER.error(
                 "⚠️ Missing or invalid %s date for event '%s'. Not writing it in calendar dataframe ⚠️",
@@ -94,7 +86,8 @@ class InfomaniakCalendar:
         LOGGER.debug("Reading calendar from %s", self.url)
 
         response = requests.get(
-            self.url, timeout=200  # pyright: ignore[reportArgumentType]
+            self.url,
+            timeout=200,  # pyright: ignore[reportArgumentType]
         )
         response.raise_for_status()
         cal = Calendar.from_ical(
@@ -104,15 +97,11 @@ class InfomaniakCalendar:
         events_data = []
         for component in cal.walk():
             if component.name == "VEVENT":
-                start_date = pd.to_datetime(
-                    component.get("dtstart").dt, errors="coerce"
-                ).tz_convert(geneva_tz)
+                start_date = pd.to_datetime(component.get("dtstart").dt, errors="coerce").tz_convert(geneva_tz)
                 if start_date > pd.Timestamp.now(tz=geneva_tz):
                     clean_event = self.clean_event(component)
                     if clean_event is None:
-                        LOGGER.error(
-                            "Failed to clean event: %s", component.get("summary")
-                        )
+                        LOGGER.error("Failed to clean event: %s", component.get("summary"))
                         continue
                     if None not in clean_event.values():
                         events_data.append(clean_event)
@@ -147,9 +136,6 @@ class InfomaniakCalendar:
         tmp_df = df.sort_values(by="start_date")
         counts = tmp_df.groupby(by="name").cumcount()
         names = tmp_df["name"].tolist()
-        new_names = [
-            f"{idx} {count+1}" if count > 0 else idx
-            for idx, count in zip(names, counts)
-        ]
+        new_names = [f"{idx} {count + 1}" if count > 0 else idx for idx, count in zip(names, counts)]
         tmp_df["name"] = new_names
         return tmp_df

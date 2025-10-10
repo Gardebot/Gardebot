@@ -5,4 +5,4 @@ Add your package documentation here.
 
 from gardebot.common import logging_configuration
 
-logging_configuration.configure_logger()
+logging_configuration.configure_logging()
