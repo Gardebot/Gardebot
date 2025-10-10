@@ -31,7 +31,7 @@ class MessageService:
             return
 
         try:
-            if payload.get("from_me"):
+            if payload.get("fromMe"):
                 LOGGER.debug("message_ignored_from_self")
                 return
 
