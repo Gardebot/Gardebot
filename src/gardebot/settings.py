@@ -10,28 +10,28 @@ from pydantic import AnyHttpUrl, BaseModel, Field
 class ServerSettings(BaseModel):
     """Settings related to the server configuration."""
 
-    host: str = Field(default_factory=lambda: os.getenv("SERVER_HOST", "0.0.0.0"))
-    port: int = Field(default_factory=lambda: int(os.getenv("SERVER_PORT", "5000")))
-    debug: bool = Field(default_factory=lambda: os.getenv("SERVER_DEBUG", "false").lower() == "true")
-    postpone_sync_time: int = Field(default_factory=lambda: int(os.getenv("POSTPONE_SYNC_TIME", "5")))
+    host: str = Field(default="0.0.0.0", env="SERVER_HOST")
+    port: int = Field(default=5000, env="SERVER_PORT")
+    debug: bool = Field(default=False, env="SERVER_DEBUG")
+    postpone_sync_time: int = Field(default=5, env="POSTPONE_SYNC_TIME")
 
 
 class ApiSettings(BaseModel):
     """Settings related to the WAHA API configuration."""
 
-    base_url: AnyHttpUrl | str = Field(default_factory=lambda: os.getenv("WAHA_BASE_URL", "http://waha:3000"))
-    session: str = Field(default_factory=lambda: os.getenv("WAHA_SESSION", "default"))
-    timeout_seconds: int = Field(default_factory=lambda: int(os.getenv("WAHA_TIMEOUT_SECONDS", "10")))
-    retry_attempts: int = Field(default_factory=lambda: int(os.getenv("WAHA_RETRY_ATTEMPTS", "3")))
+    base_url: AnyHttpUrl | str = Field(default="http://waha:3000", env="WAHA_BASE_URL")
+    session: str = Field(default="default", env="WAHA_SESSION")
+    timeout_seconds: int = Field(default=10, env="WAHA_TIMEOUT_SECONDS")
+    retry_attempts: int = Field(default=3, env="WAHA_RETRY_ATTEMPTS")
 
 
 class LoggingSettings(BaseModel):
     """Settings related to logging configuration."""
 
-    level: str = Field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
-    json_logs: bool = Field(default_factory=lambda: os.getenv("LOG_JSON", "true").lower() == "true")
-    color: bool = Field(default_factory=lambda: os.getenv("LOG_COLOR", "false").lower() == "true")
-    timestamps: bool = Field(default_factory=lambda: os.getenv("LOG_TIMESTAMPS", "true").lower() == "true")
+    level: str = Field(default="INFO", env="LOG_LEVEL")
+    json_logs: bool = Field(default=True, env="LOG_JSON")
+    color: bool = Field(default=False, env="LOG_COLOR")
+    timestamps: bool = Field(default=True, env="LOG_TIMESTAMPS")
 
 
 class AppSettings(BaseModel):
