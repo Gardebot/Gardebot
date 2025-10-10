@@ -10,7 +10,7 @@ class TestMessageEventModel(unittest.TestCase):
         envelope = MessageEventEnvelope(
             event="message",
             payload={  # type: ignore[arg-type]
-                "from_me": False,
+                "fromMe": False,
                 "from": "123",
                 "body": "Hello",
                 "timestamp": 999,
@@ -22,7 +22,7 @@ class TestMessageEventModel(unittest.TestCase):
         self.assertEqual(envelope.text(), "Hello")
 
     def test_missing_required_field(self) -> None:
-        # from_me is required
+        # fromMe is required
         with self.assertRaises(ValidationError):
             MessageEventEnvelope(
                 event="message",
@@ -36,7 +36,7 @@ class TestMessageEventModel(unittest.TestCase):
         envelope = MessageEventEnvelope(
             event="message",
             payload={  # type: ignore[arg-type]
-                "from_me": True,
+                "fromMe": True,
                 "from": "456",
             },
         )
