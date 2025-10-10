@@ -11,7 +11,7 @@ from gardebot.settings import settings
 
 configure_logging(
     level=settings.logging.level,
-    json_logs=bool(settings.logging.json()),
+    json_logs=bool(settings.logging.json_logs),
     color=settings.logging.color,
     timestamps=settings.logging.timestamps,
 )
