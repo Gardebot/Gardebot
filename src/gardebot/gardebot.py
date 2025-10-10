@@ -23,6 +23,7 @@ from gardebot.message import MessageRequest
 from gardebot.on_duty import OndutyManager
 from gardebot.poll import PollRequest
 from gardebot.sapeur import SapeurManager
+from gardebot.services.message_service import MessageService
 from gardebot.settings import settings
 from gardebot.vote import VoteManager
 
@@ -42,6 +43,12 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         MessageRequest.__init__(self, base_url=base_url)
         PollRequest.__init__(self, base_url=base_url)
         ContactRequest.__init__(self, base_url=base_url)
+
+        self.message_service = MessageService(sender=self)
+
+    def handle_incoming_message(self, data: Dict[str, Any]) -> None:
+        """Delegate inbound message event to the MessageService."""
+        self.message_service.handle_webhook_payload(data)
 
     def initialize(self) -> None:
         """Initialize the bot by syncing group participants and synching the calendar data."""
