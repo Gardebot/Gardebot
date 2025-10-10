@@ -23,7 +23,7 @@ class TestMessageService(unittest.TestCase):
         """Test the echo behavior for a normal message."""
         sender = DummySender()
         svc = MessageService(sender=sender)
-        svc.handle_webhook_payload({"payload": {"from_me": False, "from": "123", "body": "Hello world", "timestamp": 1111}})
+        svc.handle_webhook_payload({"payload": {"fromMe": False, "from": "123", "body": "Hello world", "timestamp": 1111}})
         self.assertEqual(len(sender.sent), 1)
         self.assertIn("Echoing", sender.sent[0][1])
 
@@ -31,7 +31,7 @@ class TestMessageService(unittest.TestCase):
         """Test the !ping command handling."""
         sender = DummySender()
         svc = MessageService(sender=sender)
-        svc.handle_webhook_payload({"payload": {"from_me": False, "from": "123", "body": "!ping test", "timestamp": 2222}})
+        svc.handle_webhook_payload({"payload": {"fromMe": False, "from": "123", "body": "!ping test", "timestamp": 2222}})
         self.assertEqual(len(sender.sent), 1)
         self.assertTrue(sender.sent[0][1].startswith("[pong]"))
 
@@ -39,7 +39,7 @@ class TestMessageService(unittest.TestCase):
         """Test that messages from self are ignored."""
         sender = DummySender()
         svc = MessageService(sender=sender)
-        svc.handle_webhook_payload({"payload": {"from_me": True}})
+        svc.handle_webhook_payload({"payload": {"fromMe": True}})
         self.assertEqual(sender.sent, [])
 
     def test_missing_payload(self) -> None:
@@ -53,6 +53,6 @@ class TestMessageService(unittest.TestCase):
         """Test handling of an unknown command."""
         sender = DummySender()
         svc = MessageService(sender=sender)
-        svc.handle_webhook_payload({"payload": {"from_me": False, "from": "X", "body": "!noop"}})
+        svc.handle_webhook_payload({"payload": {"fromMe": False, "from": "X", "body": "!noop"}})
         self.assertEqual(len(sender.sent), 1)
         self.assertIn("Unknown command", sender.sent[0][1])
