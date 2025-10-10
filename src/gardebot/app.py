@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from flask import Flask, jsonify, request
-from requests import Response  # type: ignore[import-untyped]
+from flask.wrappers import Response
 
 from gardebot.common.logging_configuration import configure_logging, get_logger
+from gardebot.dispatcher import EventDispatcher
 from gardebot.gardebot import Gardebot
 from gardebot.settings import settings
 
@@ -21,6 +22,8 @@ LOGGER = get_logger(__name__)
 def create_app() -> Flask:
     """Create and configure the Flask application."""
     app = Flask(__name__)
+    bot = Gardebot()
+    dispatcher = EventDispatcher(bot)
 
     @app.route("/health", methods=["GET"])
     def health() -> tuple[Response, int]:
@@ -30,7 +33,6 @@ def create_app() -> Flask:
     @app.route("/webhook", methods=["GET", "POST"])
     def webhook() -> tuple[Response, int]:
         """Handle incoming webhook events from WAHA (messages / statuses)."""
-        bot = Gardebot()
         if request.method == "GET":
             LOGGER.info("webhook_ping")
             return jsonify({"status": "ok"}), 200
@@ -46,21 +48,10 @@ def create_app() -> Flask:
             return jsonify({"status": "error", "message": "missing_event"}), 400
         LOGGER.debug("incoming_event", extra={"event": event})
         try:
-            if "message" in event:
-                bot.process_messages(data)
-            elif "poll.vote" in event:
-                bot.process_vote(data)
-            elif "session.status" in event:
-                payload = data.get("payload") or {}
-                if "WORKING" in payload.get("status", ""):
-                    bot.initialize()
-            elif "group.v2.participants" in event:
-                bot.update_sapeurs()
-            else:
-                LOGGER.info("unhandled_event", extra={"event": event})
-            return jsonify({"status": "success"}), 200
+            handled = dispatcher.dispatch(data)
+            return jsonify({"status": "success", "handled": handled}), 200
         except Exception as exc:
-            LOGGER.exception("webhook_error", error=str(exc))
+            LOGGER.exception("dispatch_error", error=str(exc))
             return jsonify({"status": "error", "message": "internal_error"}), 500
 
     return app
