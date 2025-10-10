@@ -34,7 +34,7 @@ class MessageRequest(WahaRequest):
             if payload is None:
                 LOGGER.info("No payload to process with data %s.", data)
                 return
-            if not payload.get("fromMe"):
+            if not payload.get("from_me"):
                 body = payload.get("body")
                 timestamp = payload.get("timestamp")
                 from_number = payload.get("from")

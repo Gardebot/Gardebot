@@ -1,6 +1,6 @@
 import unittest
 
-from gardebot.app import create_app  # type: ignore[import-untyped]
+from gardebot.app import create_app
 
 
 class TestDispatcherMessageIntegration(unittest.TestCase):
@@ -11,7 +11,7 @@ class TestDispatcherMessageIntegration(unittest.TestCase):
     def test_message_handled(self) -> None:
         """Test that a message event is handled correctly."""
         resp = self.client.post(
-            "/webhook", json={"event": "message", "payload": {"fromMe": False, "from": "123", "body": "Hi", "timestamp": 1}}
+            "/webhook", json={"event": "message", "payload": {"from_me": False, "from": "123", "body": "Hi", "timestamp": 1}}
         )
         self.assertEqual(resp.status_code, 200)
         if resp.json is None:
