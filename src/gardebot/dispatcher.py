@@ -24,7 +24,7 @@ class EventDispatcher:
         """Initialize with a Gardebot instance."""
         self.gardebot = gardebot
         self._mapping: Dict[str, Handler] = {
-            "message": self.gardebot.process_messages,
+            "message": self.gardebot.handle_incoming_message,
             "poll.vote": self.gardebot.process_vote,
             "session.status": self._handle_session_status,
             "group.v2.participants": self._handle_group_participants,

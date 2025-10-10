@@ -32,7 +32,7 @@ class TestEventDispatcher(unittest.TestCase):
         """Test dispatching a message event."""
         payload = {"event": "message"}
         self.assertTrue(self.dispatcher.dispatch(payload))
-        self.mock_gardebot.process_messages.assert_called_once_with(payload)
+        self.mock_gardebot.handle_incoming_message.assert_called_once_with(payload)
 
     @patch("gardebot.dispatcher.LOGGER")
     def test_dispatch_poll_vote_event(self, _mock_logger: Any) -> None:
@@ -73,4 +73,4 @@ class TestEventDispatcher(unittest.TestCase):
         """Test dispatching with partial event match."""
         payload = {"event": "incoming_message_notification"}
         self.assertTrue(self.dispatcher.dispatch(payload))
-        self.mock_gardebot.process_messages.assert_called_once_with(payload)
+        self.mock_gardebot.handle_incoming_message.assert_called_once_with(payload)
