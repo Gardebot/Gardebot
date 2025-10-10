@@ -8,7 +8,8 @@ from typing import Any, Dict, Optional
 
 import requests  # type: ignore[import-untyped]
 
-from gardebot.config import API_CONFIG, SUCCESS_STATUS_CODE
+from gardebot.config import SUCCESS_STATUS_CODE
+from gardebot.settings import settings
 
 LOGGER = logging.getLogger(__name__)
 
@@ -18,11 +19,11 @@ class WahaRequest:
 
     def __init__(
         self,
-        api_key: str = API_CONFIG["api_key"],
-        base_url: str = API_CONFIG["base_url"],
-        timeout: int = API_CONFIG["timeout"],
+        api_key: str = settings.api.api_key,
+        base_url: str = settings.api.base_url,
+        timeout: int = settings.api.timeout_seconds,
         headers: Optional[Dict[str, str]] = None,
-        session: str = API_CONFIG["session"],
+        session: str = settings.api.session,
     ) -> None:
         """Initialize the WahaRequest instance."""
         self.api_key = api_key

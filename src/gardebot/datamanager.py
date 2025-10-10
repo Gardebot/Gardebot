@@ -19,7 +19,7 @@ class DataManager(ABC):
 
     def __init__(self, filename: str) -> None:
         """Initializes the DataManager with a for file operations on Kdrive."""
-        load_dotenv(dotenv_path="credentials.env", override=True)
+        load_dotenv(dotenv_path="credentials.env")
         for var in ["KDRIVE_USER", "KDRIVE_PWD", "KDRIVE_ID", "KDRIVE_FOLDER"]:
             if os.environ.get(var) is None:
                 raise ValueError(f"{var} environment variable not set")

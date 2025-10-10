@@ -8,10 +8,11 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import pytz  # type: ignore[import-untyped]
 
-from gardebot.config import API_CONFIG, EM_NAME, GROUP_ID_GARDE_ET_PIQUET
+from gardebot.config import EM_NAME, GROUP_ID_GARDE_ET_PIQUET
 from gardebot.event import EventManager
 from gardebot.request import WahaRequest
 from gardebot.sapeur import SapeurManager
+from gardebot.settings import settings
 from gardebot.vote import VoteManager
 
 geneva_tz = pytz.timezone("Europe/Zurich")
@@ -22,7 +23,7 @@ LOGGER = logging.getLogger(__name__)
 class MessageRequest(WahaRequest):
     """Handles message interactions with the WAHA API."""
 
-    def __init__(self, base_url: str = API_CONFIG["base_url"]) -> None:
+    def __init__(self, base_url: str = settings.api.base_url) -> None:
         """Initialize the MessageRequest instance."""
         super().__init__(base_url=base_url)
 

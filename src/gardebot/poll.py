@@ -10,11 +10,12 @@ from typing import Any, Dict, List, Optional
 import pandas as pd  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 
-from gardebot.config import API_CONFIG, GROUP_ID_GARDE_ET_PIQUET
+from gardebot.config import GROUP_ID_GARDE_ET_PIQUET
 from gardebot.event import EventManager
 from gardebot.on_duty import OndutyManager
 from gardebot.request import WahaRequest
 from gardebot.sapeur import SapeurManager
+from gardebot.settings import settings
 from gardebot.vote import Vote, VoteManager
 
 LOGGER = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ LOGGER = logging.getLogger(__name__)
 class PollRequest(WahaRequest):
     """Handles poll interactions with the WAHA API."""
 
-    def __init__(self, base_url: str = API_CONFIG["base_url"]) -> None:
+    def __init__(self, base_url: str = settings.api.base_url) -> None:
         """Initialize the PollRequest instance."""
         super().__init__(base_url=base_url)
 

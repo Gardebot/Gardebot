@@ -11,7 +11,6 @@ import holidays
 import pandas as pd  # type: ignore[import-untyped]
 
 from gardebot.config import (
-    API_CONFIG,
     GROUP_ID_GARDE_ET_PIQUET,
     MAX_NB_REMINDER,
     MINIMUM_ELAPSED_HOURS,
@@ -24,6 +23,7 @@ from gardebot.message import MessageRequest
 from gardebot.on_duty import OndutyManager
 from gardebot.poll import PollRequest
 from gardebot.sapeur import SapeurManager
+from gardebot.settings import settings
 from gardebot.vote import VoteManager
 
 LOGGER = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
 
     def __init__(
         self,
-        base_url: str = API_CONFIG["base_url"],
+        base_url: str = settings.api.base_url,
         group_id: str = GROUP_ID_GARDE_ET_PIQUET,
     ) -> None:
         """Initialize the Gardebot instance."""
