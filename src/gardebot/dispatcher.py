@@ -51,6 +51,12 @@ class EventDispatcher:
             self.gardebot.initialize()
 
     def _handle_group_participants(self, _payload: Dict[str, Any]) -> None:
+        """Schedule a delayed update of group participants (sapeurs).
+
+        When a group participant change event is received, this method logs the event
+        and schedules an update of the sapeurs list after a delay specified in settings.
+        This helps to avoid race conditions or redundant updates.
+        """
         LOGGER.info(
             "participants_change_scheduled",
             delay=settings.server.postpone_sync_time,
