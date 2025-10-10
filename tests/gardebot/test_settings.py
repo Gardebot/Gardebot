@@ -11,8 +11,8 @@ class TestSettings(unittest.TestCase):
         # Ensure re-import for clean state
         for k in list(os.environ.keys()):
             if k.startswith("SERVER_") or k.startswith("WAHA_") or k.startswith("LOG_"):
-                # do not override everything globally; we selectively clear
-                pass
+                # Remove environment variables with specified prefixes for test isolation
+                os.environ.pop(k)
 
     def test_default_settings(self) -> None:
         # Force a reload of settings module
