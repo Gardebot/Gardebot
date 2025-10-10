@@ -13,7 +13,7 @@ class TestAppMessageValidationIntegration(unittest.TestCase):
             json={
                 "event": "message",
                 "payload": {
-                    "from_me": False,
+                    "fromMe": False,
                     "from": "123",
                     "body": "!ping hello",
                     "timestamp": 1000,
