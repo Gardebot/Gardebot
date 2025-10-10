@@ -41,19 +41,20 @@ def create_app() -> Flask:
             return jsonify({"status": "error", "message": "invalid_json"}), 400
 
         event = data.get("event")
-        LOGGER.debug("incoming_event", event=event)
+        if event is None:
+            LOGGER.error("missing_event")
+            return jsonify({"status": "error", "message": "missing_event"}), 400
+        LOGGER.debug("incoming_event", extra={"event": event})
         try:
-            # Temporary original logic (dispatcher will replace later)
-            event = data.get("event")
-            if event and "message" in event:
+            if "message" in event:
                 bot.process_messages(data)
-            elif event and "poll.vote" in event:
+            elif "poll.vote" in event:
                 bot.process_vote(data)
-            elif event and "session.status" in event:
+            elif "session.status" in event:
                 payload = data.get("payload") or {}
                 if "WORKING" in payload.get("status", ""):
                     bot.initialize()
-            elif event and "group.v2.participants" in event:
+            elif "group.v2.participants" in event:
                 bot.update_sapeurs()
             else:
                 LOGGER.info("unhandled_event", extra={"event": event})
