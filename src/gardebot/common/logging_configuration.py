@@ -115,7 +115,7 @@ def clear_context(*keys: str) -> None:
     if not keys:
         _additional_context_var.set({})
         return
-    current = _additional_context_var.get().copy()
+    current = _additional_context_var.get({}).copy()
     for k in keys:
         current.pop(k, None)
     _additional_context_var.set(current)
