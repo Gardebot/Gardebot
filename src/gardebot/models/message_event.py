@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 class MessagePayload(BaseModel):
     """Typed representation of WAHA message payload structure we rely on."""
 
-    from_me: bool = Field(..., description="True if message originated from the bot session.")
+    from_me: bool = Field(..., alias="fromMe", description="True if message originated from the bot session.")
     from_: Optional[str] = Field(default=None, alias="from", description="Sender's chat/number identifier.")
     body: Optional[str] = Field(default=None, description="Text body of the message.")
     timestamp: Optional[int] = Field(default=None, description="Epoch timestamp (seconds) from WAHA.")

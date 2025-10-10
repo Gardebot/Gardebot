@@ -9,7 +9,7 @@ class TestMessageValidation(unittest.TestCase):
         data = {
             "event": "message",
             "payload": {
-                "from_me": False,
+                "fromMe": False,
                 "from": "abc",
                 "body": "Ping",
                 "timestamp": 111,
