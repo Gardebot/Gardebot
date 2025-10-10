@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from gardebot.config import API_CONFIG
 from gardebot.request import WahaRequest
+from gardebot.settings import settings
 
 LOGGER = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ LOGGER = logging.getLogger(__name__)
 class ContactRequest(WahaRequest):
     """Handles contact interactions with the WAHA API."""
 
-    def __init__(self, base_url: str = API_CONFIG["base_url"]) -> None:
+    def __init__(self, base_url: str = settings.api.base_url) -> None:
         """Initialize with a specific contact ID."""
         super().__init__(base_url=base_url)
 

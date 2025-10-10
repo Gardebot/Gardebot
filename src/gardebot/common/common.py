@@ -1,10 +1,26 @@
 """Common utility functions for Gardebot."""
 
+import os
 from datetime import datetime
 
 import pandas as pd  # type: ignore[import-untyped]
+from dopplersdk import DopplerSDK  # type: ignore[import-untyped]
+from dotenv import load_dotenv
 
 from gardebot.config import MONTHS_FR, WEEKDAYS_FR
+
+
+def _load_secret(name: str, project: str = "gardebot", config: str = "dev") -> str:
+    doppler = DopplerSDK()
+    doppler_token = os.environ.get("DOPPLER_TOKEN")
+    if not doppler_token:
+        load_dotenv("credentials.env")
+        doppler_token = os.environ.get("DOPPLER_TOKEN")
+    if not doppler_token:
+        raise ValueError("DOPPLER_TOKEN environment variable is not set.")
+    doppler.set_access_token(doppler_token)
+    result = doppler.secrets.get(project=project, name=name, config=config)
+    return str(vars(result)["value"]["raw"])
 
 
 def parse_iso_datetime(s: str) -> datetime:

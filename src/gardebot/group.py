@@ -8,9 +8,10 @@ from typing import Any, Dict, List, Optional
 import pandas as pd  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 
-from gardebot.config import API_CONFIG, GROUP_ID_GARDE_ET_PIQUET
+from gardebot.config import GROUP_ID_GARDE_ET_PIQUET
 from gardebot.contact import ContactRequest
 from gardebot.request import WahaRequest
+from gardebot.settings import settings
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class GroupRequest(WahaRequest):
 
     def __init__(
         self,
-        base_url: str = API_CONFIG["base_url"],
+        base_url: str = settings.api.base_url,
         group_id: str = GROUP_ID_GARDE_ET_PIQUET,
     ) -> None:
         """Initialize with a specific group ID."""
