@@ -9,6 +9,7 @@ from gardebot.common.logging_configuration import configure_logging, get_logger
 from gardebot.dispatcher import EventDispatcher
 from gardebot.gardebot import Gardebot
 from gardebot.settings import settings
+from gardebot.validation import MessageValidationError, basic_event_presence_check, validate_message_event
 
 configure_logging(
     level=settings.logging.level,
@@ -42,11 +43,19 @@ def create_app() -> Flask:
             LOGGER.warning("invalid_json")
             return jsonify({"status": "error", "message": "invalid_json"}), 400
 
-        event = data.get("event")
-        if event is None:
-            LOGGER.error("missing_event")
-            return jsonify({"status": "error", "message": "missing_event"}), 400
-        LOGGER.debug("incoming_event", extra={"event": event})
+        event_value = data.get("event", "")
+        if isinstance(event_value, str) and event_value == "message":
+            # Perform message-specific validation
+            try:
+                _envelope = validate_message_event(data)
+                # For now we still pass the original dict to dispatcher.
+            except MessageValidationError as exc:
+                LOGGER.warning("invalid_message_payload", detail=str(exc))
+                return jsonify({"status": "error", "message": "invalid_message_payload"}), 422
+        elif not basic_event_presence_check(data):
+            LOGGER.warning("invalid_non_message_event_shape")
+            return jsonify({"status": "error", "message": "invalid_event"}), 400
+
         try:
             handled = dispatcher.dispatch(data)
             return jsonify({"status": "success", "handled": handled}), 200

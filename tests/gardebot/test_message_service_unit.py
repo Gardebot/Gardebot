@@ -1,7 +1,7 @@
 import unittest
 from typing import Any, List
 
-from gardebot.services.message_service import MessageService  # type: ignore[import-untyped]
+from gardebot.services.message_service import MessageService
 
 
 class DummySender:

@@ -1,6 +1,6 @@
 import unittest
 
-from gardebot.app import create_app  # type: ignore[import-untyped]
+from gardebot.app import create_app
 
 
 class TestDispatcherMessageIntegration(unittest.TestCase):
