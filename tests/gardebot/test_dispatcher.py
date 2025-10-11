@@ -51,7 +51,7 @@ class TestEventDispatcher(unittest.TestCase):
         self.assertTrue(self.dispatcher.dispatch(payload))
         self.mock_gardebot.initialize.assert_called_once()
 
-    @patch("gardebot.dispatcher.threading.Timer")
+    @patch("threading.Timer")
     @patch("gardebot.dispatcher.LOGGER")
     def test_dispatch_group_participants_event(self, _mock_logger: Any, mock_timer: Any) -> None:
         """Test dispatching a group participants event."""
