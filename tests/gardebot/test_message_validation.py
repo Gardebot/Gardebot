@@ -20,7 +20,7 @@ class TestMessageValidation(unittest.TestCase):
 
     def test_validate_failure(self) -> None:
         """Test that invalid message events raise MessageValidationError."""
-        # Missing 'from_me'
+        # Missing 'fromMe'
         data = {
             "event": "message",
             "payload": {
