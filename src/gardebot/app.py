@@ -7,6 +7,7 @@ from flask.wrappers import Response
 
 from gardebot.common.logging_configuration import configure_logging, get_logger
 from gardebot.dispatcher import EventDispatcher
+from gardebot.error_handlers import register_error_handlers
 from gardebot.gardebot import Gardebot
 from gardebot.settings import settings
 from gardebot.validation import MessageValidationError, basic_event_presence_check, validate_message_event
@@ -25,6 +26,8 @@ def create_app() -> Flask:
     app = Flask(__name__)
     bot = Gardebot()
     dispatcher = EventDispatcher(bot)
+
+    register_error_handlers(app)
 
     @app.route("/health", methods=["GET"])
     def health() -> tuple[Response, int]:
@@ -56,12 +59,8 @@ def create_app() -> Flask:
             LOGGER.warning("invalid_non_message_event_shape")
             return jsonify({"status": "error", "message": "invalid_event"}), 400
 
-        try:
-            handled = dispatcher.dispatch(data)
-            return jsonify({"status": "success", "handled": handled}), 200
-        except Exception as exc:
-            LOGGER.exception("dispatch_error", error=str(exc))
-            return jsonify({"status": "error", "message": "internal_error"}), 500
+        handled = dispatcher.dispatch(data)
+        return jsonify({"status": "success", "handled": handled}), 200
 
     return app
 
