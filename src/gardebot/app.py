@@ -76,7 +76,7 @@ def create_app() -> Flask:
             return jsonify({"status": "success", "handled": handled}), 200
         except Exception as exc:
             record_error(event_name, getattr(exc, "code", "internal_error"))
-            raise exc
+            return jsonify({"status": "error", "message": str(exc)}), getattr(exc, "code", 500)
 
     return app
 
