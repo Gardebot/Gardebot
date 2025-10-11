@@ -11,36 +11,7 @@ from gardebot.common.logging_configuration import get_logger
 LOGGER = get_logger(__name__)
 
 
-class GardebotError(Exception):
-    """Base domain error to allow fine-grained HTTP mapping later."""
-
-    code = "internal_error"
-    http_status = 500
-    safe_message = "Internal error."
-    detail: Optional[Dict[str, Any]] = None
-
-    def __init__(self, message: Optional[str] = None, *, detail: Optional[Dict[str, Any]] = None):
-        """Initialize the error with an optional message and detail."""
-        super().__init__(message or self.safe_message)
-        self.detail = detail or {}
-
-
-class ValidationError(GardebotError):
-    """Error raised for validation issues with incoming requests."""
-
-    code = "validation_error"
-    http_status = 422
-    safe_message = "Invalid request."
-
-
-class ExternalServiceError(GardebotError):
-    """Error raised when an external service call fails."""
-
-    code = "external_service_error"
-    http_status = 502
-    safe_message = "Upstream service error."
-
-
+from gardebot.errors import GardebotError, ValidationError, ExternalServiceError
 def register_error_handlers(app: Flask) -> None:
     """Attach error handlers to the Flask app."""
 
