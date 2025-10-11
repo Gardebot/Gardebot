@@ -44,7 +44,7 @@ def create_app() -> Flask:
             return jsonify({"status": "error", "message": "invalid_json"}), 400
 
         event_value = data.get("event", "")
-        if isinstance(event_value, str) and "message" in event_value:
+        if isinstance(event_value, str) and event_value == "message":
             # Perform message-specific validation
             try:
                 _envelope = validate_message_event(data)
