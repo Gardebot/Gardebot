@@ -29,4 +29,4 @@ class ExternalServiceError(GardebotError):
 
     code = "external_service_error"
     http_status = 502
-    safe_message = "Upstream service failed."
+    safe_message = "Upstream service error."
