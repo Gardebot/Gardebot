@@ -46,13 +46,13 @@ class HttpClient:
         method: str,
         endpoint: str,
         *,
-        json_body: Dict[str, Any] | None = None,
-        params: Dict[str, Any] | None = None,
+        json_body: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
         raise_for_status: bool = False,
     ) -> requests.Response:
         """Make an HTTP request with retries and error handling."""
         url = self._full_url(endpoint)
-        last_exc: Exception | None = None
+        last_exc: Optional[Exception] = None
         for attempt in range(self.retries + 1):
             try:
                 LOGGER.debug(
