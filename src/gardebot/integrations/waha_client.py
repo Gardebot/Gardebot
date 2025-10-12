@@ -21,7 +21,7 @@ class WahaClient:
         base_url: str = settings.api.base_url,
         session: str = settings.api.session,
         timeout: int = settings.api.timeout_seconds,
-        retries: int = 0,
+        retries: int = settings.api.retry_attempts,
     ) -> None:
         """Initialize the WahaClient with API key and base URL."""
         self.session = session
