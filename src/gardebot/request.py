@@ -75,6 +75,14 @@ class WahaRequest:
             return self._sent_error_response(exc)
 
     def _is_success(self, status: int) -> bool:
+        """Return True if the HTTP status code indicates success (2xx).
+
+        Args:
+            status (int): The HTTP status code to check.
+
+        Returns:
+            bool: True if status is in the range [200, 300), False otherwise.
+        """
         return 200 <= status < 300  # noqa: PLR2004
 
     def _sent_error_response(self, exc: Exception) -> requests.Response:
