@@ -9,8 +9,6 @@ import pandas as pd  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 from dotenv import load_dotenv
 
-from gardebot.config import SUCCESS_STATUS_CODE
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -43,7 +41,7 @@ class DataManager(ABC):
             timeout=200,
         )
 
-        if response.status_code != SUCCESS_STATUS_CODE:
+        if response.status_code != 200:  # noqa: PLR2004
             LOGGER.warning("File %s not found. Creating a new empty DataFrame.", filename)
             df = pd.DataFrame()
         else:
