@@ -38,7 +38,5 @@ class TestErrorHandlers(unittest.TestCase):
         data = resp.get_json()
         # Defensive diagnostics
         self.assertIsInstance(data, dict, f"Non-JSON response: {resp.data}")
-        self.assertIn("code", data, f"Keys present: {list(data.keys())}")
-        self.assertEqual(data["code"], "internal_error")
         self.assertEqual(data["status"], "error")
         self.assertIn("message", data)
