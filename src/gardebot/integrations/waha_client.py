@@ -39,11 +39,7 @@ class WahaClient:
         """Send a text message to a chat."""
         payload = {"session": self.session, "chatId": to_number, "text": text}
         resp = self._http.request("POST", "/api/sendText", json_body=payload)
-        if not self._http.is_success(resp.status_code):
-            raise ExternalServiceError(
-                "Failed to send text",
-                detail={"status": resp.status_code, "body": resp.text},
-            )
+        self._ensure_success(resp, "Failed to send text")
         return self._extract_json(resp)
 
     def send_event(
@@ -71,11 +67,7 @@ class WahaClient:
             payload["reply_to"] = reply_to
         endpoint = f"/api/{self.session}/events"
         resp = self._http.request("POST", endpoint, json_body=payload)
-        if not self._http.is_success(resp.status_code):
-            raise ExternalServiceError(
-                "Failed to send event",
-                detail={"status": resp.status_code, "body": resp.text},
-            )
+        self._ensure_success(resp, "Failed to send event")
         return self._extract_json(resp)
 
     def get_message(self, chat_id: str, message_id: str, download_media: bool = True) -> Dict[str, Any]:
@@ -84,11 +76,7 @@ class WahaClient:
         if download_media:
             endpoint += "?downloadMedia=true"
         resp = self._http.request("GET", endpoint)
-        if not self._http.is_success(resp.status_code):
-            raise ExternalServiceError(
-                "Failed to fetch message",
-                detail={"status": resp.status_code, "body": resp.text},
-            )
+        self._ensure_success(resp, "Failed to fetch message")
         return self._extract_json(resp)
 
     @staticmethod
@@ -98,3 +86,11 @@ class WahaClient:
             return dict(resp.json())
         except Exception as exc:  # pragma: no cover
             raise ExternalServiceError("Invalid JSON response", detail={"text": resp.text}) from exc
+
+    def _ensure_success(self, resp: Any, error_message: str) -> None:
+        """Raise ExternalServiceError if response status is not successful."""
+        if not self._http.is_success(resp.status_code):
+            raise ExternalServiceError(
+                error_message,
+                detail={"status": resp.status_code, "body": resp.text},
+            )
