@@ -1,4 +1,4 @@
-"""Module to create Bot and unify the various requests."""
+"""Module to create Bot and unify the various requests (progressive migration to composition)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,8 @@ from gardebot.config import (
 from gardebot.contact import ContactRequest
 from gardebot.event import EventManager
 from gardebot.group import GroupRequest
-from gardebot.message import MessageRequest
+from gardebot.integrations.waha_client import WahaClient
+from gardebot.messaging.adapter import MessagingAdapter
 from gardebot.on_duty import OndutyManager
 from gardebot.poll import PollRequest
 from gardebot.sapeur import SapeurManager
@@ -30,26 +31,77 @@ from gardebot.vote import VoteManager
 LOGGER = logging.getLogger(__name__)
 
 
-class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
-    """Main Gardebot class combining group, message, contact and poll functionalities."""
+class Gardebot(GroupRequest, PollRequest, ContactRequest):
+    """Main Gardebot class combining group, poll, and contact functionalities.
+
+    Messaging is handled via composition (MessagingAdapter).
+    Wrapper methods preserve public API expectations.
+    """
 
     def __init__(
         self,
         base_url: str = settings.api.base_url,
         group_id: str = GROUP_ID_GARDE_ET_PIQUET,
     ) -> None:
-        """Initialize the Gardebot instance."""
+        """Initialize the Gardebot with base URL and group ID."""
         GroupRequest.__init__(self, base_url=base_url, group_id=group_id)
-        MessageRequest.__init__(self, base_url=base_url)
         PollRequest.__init__(self, base_url=base_url)
         ContactRequest.__init__(self, base_url=base_url)
 
+        self.waha_client = WahaClient(
+            api_key=settings.api.api_key,
+            base_url=settings.api.base_url,
+            session=settings.api.session,
+            timeout=settings.api.timeout_seconds,
+            retries=settings.api.retry_attempts,
+        )
+        self.messaging = MessagingAdapter(waha_client=self.waha_client)
         self.message_service = MessageService(sender=self)
 
+    # Wrapper methods (backward compatibility)
+    def send_text(self, to_number: str, message_text: str) -> Any:
+        """Send a text message to a WhatsApp number."""
+        return self.messaging.send_text(to_number=to_number, message_text=message_text)
+
+    def send_event_message(
+        self,
+        to_number: str,
+        event_description: str,
+        event_name: str,
+        event_start_time: int,
+        event_end_time: int,
+        location: str,
+        reply_to: Optional[str] = None,
+    ) -> Any:
+        """Send a calendar event to a chat."""
+        return self.messaging.send_event_message(
+            to_number=to_number,
+            event_description=event_description,
+            event_name=event_name,
+            event_start_time=event_start_time,
+            event_end_time=event_end_time,
+            location=location,
+            reply_to=reply_to,
+        )
+
+    def get_message_by_id(self, message_id: str) -> Any:
+        """Get message details by message ID."""
+        return self.messaging.get_message_by_id(message_id)
+
+    def send_vote_reminder(self, poll_string: str) -> Any:
+        """Send reminder message to group for a specific poll."""
+        return self.messaging.send_vote_reminder(poll_string=poll_string)
+
+    def send_convocation(self, poll_string: str, on_duty_name: List[str]) -> Any:
+        """Send convocation message to on-duty sapeurs."""
+        return self.messaging.send_convocation(poll_string=poll_string, on_duty_name=on_duty_name)
+
+    # Inbound message handling
     def handle_incoming_message(self, data: Dict[str, Any]) -> None:
-        """Delegate inbound message event to the MessageService."""
+        """Handle incoming webhook payload."""
         self.message_service.handle_webhook_payload(data)
 
+    # Initialization & data sync
     def initialize(self) -> None:
         """Initialize the bot by syncing group participants and synching the calendar data."""
         self.update_gardes()
@@ -139,7 +191,6 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
         if poll_string is None:
             LOGGER.error("No poll_string returned from poll.process_vote.")
             return None
-        # we delay the check to let you the time to change your mind
         threading.Timer(180, self.check_poll_status, args=(poll_string,)).start()
         return None
 
@@ -284,6 +335,9 @@ class Gardebot(GroupRequest, MessageRequest, PollRequest, ContactRequest):
             )
             self._process_max_reminder_case(poll_string=poll_string)
         else:
-            self.send_vote_reminder(poll_string=poll_string)
-            garde.increment_nb_reminder()
-            event_manager.update_gardes(garde)
+            try:
+                self.send_vote_reminder(poll_string=poll_string)
+                garde.increment_nb_reminder()
+                event_manager.update_gardes(garde)
+            except Exception as exc:
+                LOGGER.error("Failed to send reminder for %s: %s", poll_string, exc)
