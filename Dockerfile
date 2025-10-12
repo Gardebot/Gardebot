@@ -49,4 +49,7 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /usr/bin/doppler /usr/bin/doppler
 
 ENTRYPOINT ["doppler", "run", "--config-dir", "/app/.doppler", "--"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:5000/health || exit 1
+
 CMD ["python", "-m", "gardebot.app"]
