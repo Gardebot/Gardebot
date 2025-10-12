@@ -25,7 +25,7 @@ class HttpClient:
     def __init__(
         self,
         base_url: str = settings.api.base_url,
-        timeout: int | float = settings.api.timeout_seconds,
+        timeout: Union[int, float] = settings.api.timeout_seconds,
         headers: Optional[Dict[str, str]] = None,
         retries: int = settings.api.retry_attempts,
     ) -> None:
