@@ -23,7 +23,7 @@ def _exponential_backoff(attempt: int, base: float, cap: float, jitter: bool = T
     return delay
 
 
-def safe_response_preview(resp: requests.Response, limit: int = 500) -> Any:
+def safe_response_preview(resp: requests.Response, limit: int = 500) -> str:
     """Get a safe preview of the response text, limited to `limit` characters."""
     try:
         return resp.text[:limit]
