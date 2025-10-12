@@ -81,7 +81,7 @@ class HttpClient:
                         "text": resp.text[:500],
                     },
                 )
-                if raise_for_status and not 200 <= resp.status_code < 300:  # noqa: PLR2004
+                if raise_for_status and not self.is_success(resp.status_code):
                     raise ExternalServiceError(
                         f"Non-success status {resp.status_code}",
                         detail={"status": resp.status_code, "url": url, "body": safe_response_preview(resp)},
@@ -99,6 +99,10 @@ class HttpClient:
             "HTTP request failed",
             detail={"url": url, "error": str(last_exc)},
         )
+
+    def is_success(self, status: int) -> bool:
+        """Return True if the HTTP status code indicates success (2xx)."""
+        return 200 <= status < 300  # noqa: PLR2004
 
 
 def safe_response_preview(resp: requests.Response, limit: int = 500) -> Union[Any, str]:

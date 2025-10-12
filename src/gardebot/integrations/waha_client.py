@@ -39,7 +39,7 @@ class WahaClient:
         """Send a text message to a chat."""
         payload = {"session": self.session, "chatId": to_number, "text": text}
         resp = self._http.request("POST", "/api/sendText", json_body=payload)
-        if not (200 <= resp.status_code < 300):  # noqa: PLR2004
+        if not self._http.is_success(resp.status_code):
             raise ExternalServiceError(
                 "Failed to send text",
                 detail={"status": resp.status_code, "body": resp.text},
@@ -71,7 +71,7 @@ class WahaClient:
             payload["reply_to"] = reply_to
         endpoint = f"/api/{self.session}/events"
         resp = self._http.request("POST", endpoint, json_body=payload)
-        if not (200 <= resp.status_code < 300):  # noqa: PLR2004
+        if not self._http.is_success(resp.status_code):
             raise ExternalServiceError(
                 "Failed to send event",
                 detail={"status": resp.status_code, "body": resp.text},
@@ -84,7 +84,7 @@ class WahaClient:
         if download_media:
             endpoint += "?downloadMedia=true"
         resp = self._http.request("GET", endpoint)
-        if not (200 <= resp.status_code < 300):  # noqa: PLR2004
+        if not self._http.is_success(resp.status_code):
             raise ExternalServiceError(
                 "Failed to fetch message",
                 detail={"status": resp.status_code, "body": resp.text},
