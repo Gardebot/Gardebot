@@ -36,10 +36,9 @@ class WahaClient:
         )
 
     def send_text(self, to_number: str, text: str) -> Dict[str, Any]:
-        """Send a text message to a chat."""
+        """Send a text message to a WhatsApp number."""
         payload = {"session": self.session, "chatId": to_number, "text": text}
-        resp = self._http.request("POST", "/api/sendText", json_body=payload)
-        self._ensure_success(resp, "Failed to send text")
+        resp = self._http.request("POST", "/api/sendText", json_body=payload, raise_for_status=True)
         return self._extract_json(resp)
 
     def send_event(
@@ -66,17 +65,13 @@ class WahaClient:
         if reply_to:
             payload["reply_to"] = reply_to
         endpoint = f"/api/{self.session}/events"
-        resp = self._http.request("POST", endpoint, json_body=payload)
-        self._ensure_success(resp, "Failed to send event")
+        resp = self._http.request("POST", endpoint, json_body=payload, raise_for_status=True)
         return self._extract_json(resp)
 
-    def get_message(self, chat_id: str, message_id: str, download_media: bool = True) -> Dict[str, Any]:
-        """Fetch a message by ID, optionally downloading media."""
+    def get_message(self, chat_id: str, message_id: str) -> Dict[str, Any]:
+        """Fetch a message by ID."""
         endpoint = f"/api/{self.session}/chats/{chat_id}/messages/{message_id}"
-        if download_media:
-            endpoint += "?downloadMedia=true"
-        resp = self._http.request("GET", endpoint)
-        self._ensure_success(resp, "Failed to fetch message")
+        resp = self._http.request("GET", endpoint, raise_for_status=True)
         return self._extract_json(resp)
 
     @staticmethod

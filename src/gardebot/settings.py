@@ -23,6 +23,8 @@ class ApiSettings(BaseModel):
     session: str = Field(default="default", env="WAHA_SESSION")  # type: ignore
     timeout_seconds: int = Field(default=10, env="WAHA_TIMEOUT_SECONDS")  # type: ignore
     retry_attempts: int = Field(default=3, env="WAHA_RETRY_ATTEMPTS")  # type: ignore
+    retry_backoff_seconds: float = Field(default=0.5, env="WAHA_RETRY_BACKOFF_SECONDS")  # type: ignore
+    retry_backoff_max_seconds: float = Field(default=5.0, env="WAHA_RETRY_BACKOFF_MAX_SECONDS")  # type: ignore
     api_key: str = Field(default_factory=lambda: ApiSettings._load_api_key_static())
 
     @staticmethod
