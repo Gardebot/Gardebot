@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from time import time
+from typing import Dict
+
 from flask import Flask, jsonify, request
 from flask.wrappers import Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from gardebot.common.logging_configuration import configure_logging, get_logger
 from gardebot.dispatcher import EventDispatcher
 from gardebot.error_handlers import register_error_handlers
 from gardebot.gardebot import Gardebot
+from gardebot.metrics import record_error, record_event
 from gardebot.settings import settings
 from gardebot.validation import MessageValidationError, basic_event_presence_check, validate_message_event
 
@@ -33,6 +38,10 @@ def create_app() -> Flask:
     def health() -> tuple[Response, int]:
         """Simple health check endpoint."""
         return jsonify({"status": "ok"}), 200
+
+    @app.route("/metrics", methods=["GET"])
+    def metrics() -> tuple[bytes, int, Dict[str, str]]:
+        return generate_latest(), 200, {"Content-Type": CONTENT_TYPE_LATEST}
 
     @app.route("/webhook", methods=["GET", "POST"])
     def webhook() -> tuple[Response, int]:
@@ -59,8 +68,15 @@ def create_app() -> Flask:
             LOGGER.warning("invalid_non_message_event_shape")
             return jsonify({"status": "error", "message": "invalid_event"}), 400
 
-        handled = dispatcher.dispatch(data)
-        return jsonify({"status": "success", "handled": handled}), 200
+        start = time()
+        event_name = str(data.get("event", "unknown"))
+        try:
+            handled = dispatcher.dispatch(data)
+            record_event(event_name, handled, time() - start)
+            return jsonify({"status": "success", "handled": handled}), 200
+        except Exception as exc:
+            record_error(event_name, getattr(exc, "code", "internal_error"))
+            return jsonify({"status": "error", "message": str(exc)}), getattr(exc, "code", 500)
 
     return app
 

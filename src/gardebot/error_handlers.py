@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-
 from flask import Flask, Response, jsonify
 
 from gardebot.common.logging_configuration import get_logger
+from gardebot.errors import GardebotError
 
 LOGGER = get_logger(__name__)
 
 
-from gardebot.errors import GardebotError, ValidationError, ExternalServiceError
 def register_error_handlers(app: Flask) -> None:
     """Attach error handlers to the Flask app."""
 
