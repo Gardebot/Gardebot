@@ -108,7 +108,7 @@ class Event(BaseModel):
 
     @field_validator("scheduled_publication_date")
     @classmethod
-    def _auto_sched_pub(cls, info: ValidationInfo, v: Optional[pd.Timestamp] = None) -> pd.Timestamp:
+    def _auto_sched_pub(cls, v: Optional[pd.Timestamp] = None, info: ValidationInfo) -> pd.Timestamp:
         if v:
             return v
         values = info.context
