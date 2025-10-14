@@ -89,7 +89,7 @@ class FileStorage:
         if also_csv:
             try:
                 self.write_csv(df, filename)
-            except Exception as exc:  # noqa: BLE001
+            except (requests.RequestException, OSError) as exc:
                 LOGGER.exception("CSV write failed for %s: %s", filename, exc)
 
 
