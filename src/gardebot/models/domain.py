@@ -71,7 +71,7 @@ class Event(BaseModel):
 
     @field_validator("uid")
     @classmethod
-    def _auto_uid(cls, info: ValidationInfo, v: Optional[str] = None) -> str:
+    def _auto_uid(cls, v: Optional[str] = None, info: ValidationInfo) -> str:
         """Generate UID if not provided."""
         if v:
             return v
