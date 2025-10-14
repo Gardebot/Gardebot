@@ -83,7 +83,7 @@ class Event(BaseModel):
 
     @field_validator("poll_string")
     @classmethod
-    def _auto_poll_string(cls, info: ValidationInfo, v: Optional[str] = None) -> str:
+    def _auto_poll_string(cls, v: Optional[str] = None, info: ValidationInfo) -> str:
         """Generate poll string if absent."""
         if v:
             return v
