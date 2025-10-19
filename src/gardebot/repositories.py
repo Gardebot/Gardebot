@@ -44,7 +44,7 @@ class EventRepository:
             return []
         return [
             Event(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")
-        ]  # TODO: deal with possibility new fields in Eventwhich are not in df
+        ]  # TODO: deal with possibility new fields in Event which are not in df
 
     def upsert_event(self, event: Event) -> None:
         """Insert or update an event based on its uid."""
