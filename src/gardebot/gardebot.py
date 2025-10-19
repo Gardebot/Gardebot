@@ -1,4 +1,4 @@
-"""Module to create Bot and unify the various requests."""
+"""Module to create Bot and unify the various requests (progressive migration to composition)."""
 
 from __future__ import annotations
 
