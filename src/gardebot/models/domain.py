@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
 import pytz  # type: ignore[import-untyped]
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
+from gardebot.common.common import _format_french_date
 from gardebot.config import (
     MAX_NB_REMINDER,
     MINIMUM_ELAPSED_HOURS,
@@ -16,12 +17,6 @@ from gardebot.config import (
 )
 
 geneva_tz = pytz.timezone("Europe/Zurich")
-
-
-def _format_french_date(ts: pd.Timestamp) -> str:
-    """Lightweight re-export (or inline) of original formatting to avoid import cycle."""
-    timestamp_str: str = ts.strftime("%d/%m/%Y")
-    return timestamp_str
 
 
 class Sapeur(BaseModel):
@@ -48,20 +43,17 @@ class Event(BaseModel):
     """Domain model for an event (garde)."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    uid: str
     title: str
     location: str
     start_date: pd.Timestamp
     end_date: pd.Timestamp
     headcount: int
     poll_uid: Optional[str] = None
-    admin_poll_uid: Optional[str] = None
-    poll_string: str
-    scheduled_publication_date: pd.Timestamp
     published_date: Optional[pd.Timestamp] = None
+    scheduled_publication_date: pd.Timestamp = pd.Timestamp(0)
     nb_reminder: int = 0
 
-    @field_validator("start_date", "end_date", "scheduled_publication_date", mode="before")
+    @field_validator("start_date", "end_date", mode="before")
     @classmethod
     def _ensure_ts(cls, v: pd.Timestamp) -> pd.Timestamp:
         """Ensure date-like fields are pandas Timestamps."""
@@ -69,53 +61,34 @@ class Event(BaseModel):
             return v
         return pd.Timestamp(v)
 
-    @field_validator("uid")
-    @classmethod
-    def _auto_uid(cls, v: Optional[str] = None, info: ValidationInfo) -> str:
-        """Generate UID if not provided."""
-        if v:
-            return v
-        values = info.context
-        if values is None:
-            raise ValueError("Cannot compute uid without context")
-        base = f"{values.get('title')}{values.get('location')}{values.get('start_date')}{values.get('end_date')}"
+    @computed_field  # type: ignore[misc]
+    @property
+    def uid(self) -> str:
+        """Generate a unique identifier for the event."""
+        base = f"{self.title}{self.location}{self.start_date}{self.end_date}"
         return hashlib.sha256(base.encode()).hexdigest()
 
-    @field_validator("poll_string")
-    @classmethod
-    def _auto_poll_string(cls, v: Optional[str] = None, info: ValidationInfo) -> str:
-        """Generate poll string if absent."""
-        if v:
-            return v
-        values = info.context
-        if values is None:
-            raise ValueError("Cannot compute poll_string without context")
-        start: pd.Timestamp = values["start_date"]
-        end: pd.Timestamp = values["end_date"]
-        title = values["title"]
-        location = values["location"]
-        start_date_str = _format_french_date(start)
-        time_start = f"{start.hour}h{start.minute:02d}"
-        if start.date() == end.date():
-            time_end = f"{end.hour}h{end.minute:02d}"
+    @computed_field  # type: ignore[misc]
+    @property
+    def poll_string(self) -> str:
+        """Generate a string for the pollt."""
+        start_date_str = _format_french_date(self.start_date)
+        time_start = f"{self.start_date.hour}h{self.start_date.minute:02d}"
+        if self.start_date.date() == self.end_date.date():
+            time_end = f"{self.end_date.hour}h{self.end_date.minute:02d}"
             time_part = f"de {time_start} à {time_end}"
         else:
-            end_date_str = _format_french_date(end)
-            time_end = f"{end.hour}h{end.minute:02d}"
+            end_date_str = _format_french_date(self.end_date)
+            time_end = f"{self.end_date.hour}h{self.end_date.minute:02d}"
             time_part = f"{time_start} au {end_date_str} {time_end}"
-        result = f"{title} : {start_date_str} {time_part}, {location}"
+        result = f"{self.title} : {start_date_str} {time_part}, {self.location}"
         return result[0].upper() + result[1:]
 
-    @field_validator("scheduled_publication_date")
-    @classmethod
-    def _auto_sched_pub(cls, v: Optional[pd.Timestamp] = None, info: ValidationInfo) -> pd.Timestamp:
-        if v:
-            return v
-        values = info.context
-        if values is None:
-            raise ValueError("Cannot compute scheduled_publication_date without context")
-        start: pd.Timestamp = values["start_date"]
-        return start - pd.Timedelta(days=TIME_BEFORE_PUBLICATION_DAY)
+    @model_validator(mode="after")
+    def _default_pub_date(self) -> "Event":
+        """Set default scheduled publication date."""
+        self.scheduled_publication_date = self.start_date - pd.Timedelta(days=TIME_BEFORE_PUBLICATION_DAY)
+        return self
 
     def should_send_reminder(self) -> bool:
         """Determine whether a reminder should be sent based on elapsed time and limits."""
@@ -139,6 +112,20 @@ class Event(BaseModel):
         when_ts = when or pd.Timestamp.now(tz=geneva_tz)
         return self.model_copy(update={"published_date": when_ts})
 
+    def is_published(self) -> bool:
+        """Check if the event has been published."""
+        return self.published_date is not None
+
+    def is_assigned(self) -> bool:
+        """Check if the event has been assigned (has poll_uid)."""
+        return self.poll_uid is not None
+
+    def with_poll_uid(self, poll_uid: str) -> "Event":
+        """Return a new Event with poll_uid set (idempotent / protective)."""
+        if self.poll_uid and self.poll_uid != poll_uid:
+            raise ValueError(f"poll_uid already set to {self.poll_uid}")
+        return self.model_copy(update={"poll_uid": poll_uid})
+
 
 class VoteRecord(BaseModel):
     """Represents a single vote row (normalized storage)."""
@@ -151,8 +138,8 @@ class VoteRecord(BaseModel):
 class OnDutyAssignment(BaseModel):
     """Represents an on-duty assignment row."""
 
-    poll_string: str
-    sapeur_name: str
+    event: Event
+    sapeur_list: List[Sapeur]
     assigned: bool = True
 
 

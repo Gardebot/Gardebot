@@ -72,7 +72,7 @@ class FileStorage:
         if not filename.endswith(".csv"):
             filename = f"{filename}.csv"
         url = self._file_url(filename)
-        csv_data = df.to_csv(index=False)
+        csv_data = df.to_csv(index=True)
         resp = requests.put(
             url,
             data=csv_data.encode("utf-8"),
@@ -85,6 +85,7 @@ class FileStorage:
 
     def atomic_write(self, df: pd.DataFrame, filename: str, also_csv: bool = True) -> None:
         """High-level write (parquet + optional CSV)."""
+        LOGGER.info("Writing file %s (rows=%d, also_csv=%s)", filename, len(df), also_csv)
         self.write_parquet(df, filename)
         if also_csv:
             try:

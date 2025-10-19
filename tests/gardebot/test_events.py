@@ -4,8 +4,8 @@ from typing import Any, Dict, List
 
 import pandas as pd  # type: ignore[import-untyped]
 
-from gardebot.models.domain import Event  # type: ignore[import-untyped]
-from gardebot.services.events import EventService  # type: ignore[import-untyped]
+from gardebot.models.domain import Event
+from gardebot.services.events import EventService
 
 
 class InMemoryEventRepo:
@@ -33,15 +33,12 @@ def test_event_poll_string_generation() -> None:
     start = pd.Timestamp("2025-01-10 18:00")
     end = pd.Timestamp("2025-01-10 20:00")
     e = Event(
-        uid="",
         title="Réunion",
         location="Casern",
         start_date=start,
         end_date=end,
         headcount=5,
         poll_uid=None,
-        admin_poll_uid=None,
-        poll_string="",
         scheduled_publication_date=None,
     )
     assert "Réunion" in e.poll_string
@@ -53,15 +50,12 @@ def test_reminder_logic() -> None:
     start = pd.Timestamp.now() + pd.Timedelta(days=3)
     end = start + pd.Timedelta(hours=2)
     e = Event(
-        uid="",
         title="Test",
         location="Base",
         start_date=start,
         end_date=end,
         headcount=3,
         poll_uid=None,
-        admin_poll_uid=None,
-        poll_string="",
         scheduled_publication_date=None,
         published_date=pd.Timestamp.now() - pd.Timedelta(hours=10),
         nb_reminder=0,
@@ -72,31 +66,24 @@ def test_reminder_logic() -> None:
 
 def test_consecutive_publication_propagation() -> None:
     """Test that events on same day get same publication date."""
-    repo = InMemoryEventRepo()
-    service = EventService(repository=repo)
+    service = EventService()
     d = pd.Timestamp("2025-02-01 09:00")
     e1 = Event(
-        uid="",
         title="A",
         location="L1",
         start_date=d,
         end_date=d + pd.Timedelta(hours=2),
         headcount=2,
         poll_uid=None,
-        admin_poll_uid=None,
-        poll_string="",
         scheduled_publication_date=None,
     )
     e2 = Event(
-        uid="",
         title="B",
         location="L2",
         start_date=d,
         end_date=d + pd.Timedelta(hours=3),
         headcount=3,
         poll_uid=None,
-        admin_poll_uid=None,
-        poll_string="",
         scheduled_publication_date=None,
     )
     service.repo.bulk_upsert([e1, e2])

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List
 
-from gardebot.models.domain import OnDutyAssignment
+from gardebot.models.domain import Event, OnDutyAssignment, Sapeur
 from gardebot.repositories import OnDutyRepository
 
 
@@ -15,19 +15,19 @@ class OnDutyService:
         """Initialize with optional custom repository."""
         self.repo = repository or OnDutyRepository()
 
-    def assign(self, poll_string: str, names: List[str]) -> List[OnDutyAssignment]:
-        """Assign one or multiple sapeurs to a poll (idempotent)."""
-        assignments = []
-        for name in names:
-            a = OnDutyAssignment(poll_string=poll_string, sapeur_name=name, assigned=True)
-            self.repo.add_assignment(a)
-            assignments.append(a)
-        return assignments
-
     def is_assigned(self, poll_string: str) -> bool:
-        """Return True if any assignment exists for poll."""
+        """Return True if any assignment exists for poll."""  # TODO: This should test a boolean
         return self.repo.is_assigned(poll_string)
 
     def list_assigned(self, poll_string: str) -> List[str]:
         """List assigned sapeur names for poll."""
-        return [a.sapeur_name for a in self.repo.list_for_poll(poll_string)]
+        return [sap.name for sap in self.repo.list_for_poll(poll_string)]
+
+    def assign(self, event: Event, sapeurs: List[Sapeur]) -> None:
+        """Assign sapeurs to on-duty for event."""
+        assignment = OnDutyAssignment(
+            event=event,
+            sapeur_list=sapeurs,
+            assigned=True,
+        )
+        self.repo.write_assignment(assignment)

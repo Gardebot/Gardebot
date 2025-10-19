@@ -16,13 +16,7 @@ def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(GardebotError)
     def handle_gardebot_error(exc: GardebotError) -> tuple[Response, int]:
         """Handle known GardebotError exceptions."""
-        LOGGER.warning(
-            "domain_error",
-            code=exc.code,
-            detail=exc.detail,
-            message=str(exc),
-            http_status=exc.http_status,
-        )
+        LOGGER.warning("domain_error", code=exc.code, detail=exc.detail, message=str(exc), http_status=exc.http_status, exc_info=True)
         return (
             jsonify(
                 {
