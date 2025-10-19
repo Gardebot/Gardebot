@@ -1,4 +1,4 @@
-"""GroupAdapter: group-related operations via WahaClient (composition over inheritance)."""
+"""ContactAdapter: contact-related operations via WahaClient (composition over inheritance)."""
 
 from __future__ import annotations
 
