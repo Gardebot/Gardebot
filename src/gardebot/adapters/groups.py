@@ -88,7 +88,10 @@ class GroupAdapter:
             elif isinstance(resp.json(), dict):
                 data = self._client._extract_json_dict(resp)  # noqa: SLF001
             else:
-                LOGGER.info("groups_fetched", extra={"count": len(data) if isinstance(data, list) else "unknown"})
+                raise ExternalServiceError(
+                    "Unexpected groups response data shape",
+                    detail={"type": type(resp.json()).__name__},
+                )
             return data
         except ExternalServiceError:
             raise
