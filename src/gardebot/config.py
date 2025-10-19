@@ -1,16 +1,21 @@
 """Configuration settings for the Gardebot application."""
 
 # GROUP_ID_GARDE_ET_PIQUET = "120363402596282813@g.us" # PROD ID POUR LE GROUPE DES GARDES
-# GROUP_ID_GARDE_ET_PIQUET = (
-#     "120363419490068226@g.us"  # TEST ID POUR PRIVATE TEST
-# )
-GROUP_ID_GARDE_ET_PIQUET = "120363417540870860@g.us"
+GROUP_ID_GARDE_ET_PIQUET = "120363419490068226@g.us"  # PRIVATE TEST
+# GROUP_ID_GARDE_ET_PIQUET = "120363417540870860@g.us"
 TIME_BEFORE_PUBLICATION_DAY = 21
 PREVENTION_DAY_BEFORE_HOLIDAY = 35
 MAX_NB_REMINDER = 7
 # MAX_NB_REMINDER = 3
 MARGIN_NOMINATION = 2  # Margin for forced nomination to ensure enough people are nominated
 MINIMUM_ELAPSED_HOURS = 24  # Minimum hours before sending another reminder (set to 24 to prevent spam)
+
+# Filenames
+EVENTS_FILE = "events"
+SAPEURS_FILE = "sapeurs"
+VOTES_FILE = "votes"
+ONDUTY_FILE = "on_duty"
+
 
 MONTHS_FR = {
     1: "janvier",

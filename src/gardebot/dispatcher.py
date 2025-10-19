@@ -4,13 +4,18 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict
 
-import structlog
-
 from gardebot.common.debounce import Debouncer
+from gardebot.common.logging_configuration import configure_logging, get_logger
 from gardebot.gardebot import Gardebot
 from gardebot.settings import settings
 
-LOGGER = structlog.get_logger(__name__)
+configure_logging(
+    level=settings.logging.level,
+    json_logs=bool(settings.logging.json_logs),
+    color=settings.logging.color,
+    timestamps=settings.logging.timestamps,
+)
+LOGGER = get_logger(__name__)
 Handler = Callable[[Dict[Any, Any]], None]
 
 
@@ -30,6 +35,7 @@ class EventDispatcher:
             "group.v2.participants": self._handle_group_participants,
         }
         self._participant_debouncer = Debouncer(settings.server.postpone_sync_time, self.gardebot.update_sapeurs)
+        self._initialize_debouncer = Debouncer(settings.server.postpone_sync_time, self.gardebot.initialize)
 
     def dispatch(self, payload: Dict[str, Any]) -> bool:
         """Dispatch the event to the appropriate handler."""
@@ -46,10 +52,16 @@ class EventDispatcher:
 
     def _handle_session_status(self, payload: Dict[str, Any]) -> None:
         """Handle session status changes."""
-        status = (payload.get("payload") or {}).get("status", "")
+        tmp_payload = payload.get("payload")
+        if not tmp_payload:
+            LOGGER.debug("session_status_no_payload")
+            return
+
+        status = tmp_payload.get("status")
         if "WORKING" in status:
-            LOGGER.info("session_status_working")
-            self.gardebot.initialize()
+            LOGGER.info("session_status_change %s. Starting gardebot.initialize in %s seconds.", status, settings.server.postpone_sync_time)
+            self._initialize_debouncer.trigger()
+        return None
 
     def _handle_group_participants(self, _payload: Dict[str, Any]) -> None:
         """Handle group participant changes with debouncing."""

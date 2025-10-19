@@ -26,7 +26,8 @@ def _exponential_backoff(attempt: int, base: float, cap: float, jitter: bool = T
 def safe_response_preview(resp: requests.Response, limit: int = 500) -> str:
     """Get a safe preview of the response text, limited to `limit` characters."""
     try:
-        return resp.text[:limit]
+        response: str = resp.text[:limit]
+        return response
     except Exception:  # pragma: no cover
         return "<unreadable>"
 
@@ -97,6 +98,7 @@ class HttpClient:
                         "attempt": attempt,
                         "retries": self.retries,
                     },
+                    exc_info=True,
                 )
                 resp = requests.request(
                     method=method.upper(),
@@ -135,6 +137,7 @@ class HttpClient:
                         "will_retry": should_retry,
                         "error": str(exc),
                     },
+                    exc_info=True,
                 )
                 if should_retry:
                     delay = _exponential_backoff(

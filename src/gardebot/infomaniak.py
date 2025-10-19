@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 import pandas as pd  # type: ignore[import-untyped]
 import pytz  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
+from dotenv import load_dotenv
 from icalendar import Calendar  # type: ignore[import-untyped]
 from icalendar.cal import Component  # type: ignore[import-untyped]
 
@@ -20,6 +21,9 @@ class InfomaniakCalendar:
     def __init__(self) -> None:
         """Initializes the Calendar class."""
         self.url = os.environ.get("CALENDAR_URL")
+        if self.url is None:
+            load_dotenv(dotenv_path="credentials.env")
+            self.url = os.environ.get("CALENDAR_URL")
 
     def _get_name_from_event(self, event: Component) -> Optional[str]:
         """Extracts the name from an event."""

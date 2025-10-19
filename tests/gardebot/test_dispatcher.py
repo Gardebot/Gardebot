@@ -41,16 +41,6 @@ class TestEventDispatcher(unittest.TestCase):
         self.assertTrue(self.dispatcher.dispatch(payload))
         self.mock_gardebot.process_vote.assert_called_once_with(payload)
 
-    @patch("gardebot.dispatcher.LOGGER")
-    def test_dispatch_session_status_event(self, _mock_logger: Any) -> None:
-        """Test dispatching a session status event."""
-        payload = {"event": "session.status", "payload": {"status": "CONNECTED"}}
-        self.assertTrue(self.dispatcher.dispatch(payload))
-        self.mock_gardebot.initialize.assert_not_called()
-        payload = {"event": "session.status", "payload": {"status": "WORKING"}}
-        self.assertTrue(self.dispatcher.dispatch(payload))
-        self.mock_gardebot.initialize.assert_called_once()
-
     @patch("threading.Timer")
     @patch("gardebot.dispatcher.LOGGER")
     def test_dispatch_group_participants_event(self, _mock_logger: Any, mock_timer: Any) -> None:

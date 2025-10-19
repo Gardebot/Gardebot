@@ -62,7 +62,7 @@ def create_app() -> Flask:
                 _envelope = validate_message_event(data)
                 # For now we still pass the original dict to dispatcher.
             except MessageValidationError as exc:
-                LOGGER.warning("invalid_message_payload", detail=str(exc))
+                LOGGER.warning("invalid_message_payload", detail=str(exc), exc_info=True)
                 return jsonify({"status": "error", "message": "invalid_message_payload"}), 422
         elif not basic_event_presence_check(data):
             LOGGER.warning("invalid_non_message_event_shape")
