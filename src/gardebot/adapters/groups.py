@@ -86,7 +86,7 @@ class GroupAdapter:
             if isinstance(resp.json(), list):
                 data = self._client._extract_json_list(resp)  # noqa: SLF001
             elif isinstance(resp.json(), dict):
-                data = self._client._extract_json_list(resp)  # noqa: SLF001
+                data = self._client._extract_json_dict(resp)  # noqa: SLF001
             else:
                 LOGGER.info("groups_fetched", extra={"count": len(data) if isinstance(data, list) else "unknown"})
             return data
