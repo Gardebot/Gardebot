@@ -71,7 +71,7 @@ class Event(BaseModel):
     @computed_field  # type: ignore[misc]
     @property
     def poll_string(self) -> str:
-        """Generate a string for the pollt."""
+        """Generate a string for the poll."""
         start_date_str = _format_french_date(self.start_date)
         time_start = f"{self.start_date.hour}h{self.start_date.minute:02d}"
         if self.start_date.date() == self.end_date.date():
