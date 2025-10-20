@@ -7,10 +7,10 @@ from typing import Iterable, List, Optional
 import pandas as pd  # type: ignore[import-untyped]
 
 from gardebot.common.logging_configuration import configure_logging, get_logger
+from gardebot.common.storage import FileStorage, ensure_columns
 from gardebot.config import EVENTS_FILE, ONDUTY_FILE, SAPEURS_FILE, VOTES_FILE
 from gardebot.models.domain import Event, OnDutyAssignment, Sapeur, VoteRecord
 from gardebot.settings import settings
-from gardebot.storage import FileStorage, ensure_columns
 
 configure_logging(
     level=settings.logging.level,

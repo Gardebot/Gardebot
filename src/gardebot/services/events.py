@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from gardebot.infomaniak import InfomaniakCalendar
+from gardebot.integrations.infomaniak import InfomaniakCalendar
 from gardebot.models.domain import Event
 from gardebot.repositories import EventRepository
 

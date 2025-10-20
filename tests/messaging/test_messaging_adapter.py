@@ -3,9 +3,9 @@
 import unittest
 from unittest.mock import MagicMock
 
+from gardebot.adapters.messaging import MessagingAdapter
 from gardebot.errors import ExternalServiceError
 from gardebot.integrations.waha_client import WahaClient
-from gardebot.messaging.adapter import MessagingAdapter
 
 
 class TestMessagingAdapter(unittest.TestCase):
