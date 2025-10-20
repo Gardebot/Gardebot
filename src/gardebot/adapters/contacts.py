@@ -13,7 +13,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ContactAdapter:
-    """Encapsulates group-related WAHA interactions."""
+    """Encapsulates contact-related WAHA interactions."""
 
     def __init__(
         self,
