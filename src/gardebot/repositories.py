@@ -6,18 +6,12 @@ from typing import Iterable, List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
 
-from gardebot.common.logging_configuration import configure_logging, get_logger
+from gardebot.common.logging_configuration import get_logger
 from gardebot.common.storage import FileStorage, ensure_columns
 from gardebot.config import EVENTS_FILE, ONDUTY_FILE, SAPEURS_FILE, VOTES_FILE
+from gardebot.errors import NotFoundError
 from gardebot.models.domain import Event, OnDutyAssignment, Sapeur, VoteRecord
-from gardebot.settings import settings
 
-configure_logging(
-    level=settings.logging.level,
-    json_logs=bool(settings.logging.json_logs),
-    color=settings.logging.color,
-    timestamps=settings.logging.timestamps,
-)
 LOGGER = get_logger(__name__)
 
 
@@ -40,7 +34,7 @@ class EventRepository:
         """Return all stored events."""
         df = self.storage.read_parquet(EVENTS_FILE)
         if df.empty:
-            LOGGER.debug("No events found in storage.")
+            LOGGER.debug("events_empty")
             return []
         return [
             Event(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")
@@ -57,36 +51,36 @@ class EventRepository:
     def bulk_upsert(self, events: Iterable[Event]) -> None:
         """Upsert multiple events."""
         current = {e.uid: e for e in self.list_events()}
-        new_event = False
+        new_event_added = False
         for ev in events:
-            if ev.uid not in current.keys():
+            if ev.uid not in current:
                 current[ev.uid] = ev
-                new_event = True
-        if new_event:
+                new_event_added = True
+        if new_event_added:
             df = pd.DataFrame([e.model_dump() for e in current.values()])
             self.storage.atomic_write(df, EVENTS_FILE)
         else:
-            LOGGER.info("No new events to upsert.")
+            LOGGER.info("no_new_events")
 
     def find_by_uid(self, uid: str) -> Event:
         """Find an event by its UID."""
         event = next((e for e in self.list_events() if e.uid == uid), None)
         if not event:
-            raise ValueError(f"Event with uid {uid} not found")
+            raise NotFoundError(detail={"resource": "event", "uid": uid})
         return event
 
     def find_by_poll_string(self, poll_string: str) -> Event:
         """Find an event by poll string."""
         event = next((e for e in self.list_events() if e.poll_string == poll_string), None)
         if not event:
-            raise ValueError(f"Event with poll string {poll_string} not found")
+            raise NotFoundError(detail={"resource": "event", "poll_string": poll_string})
         return event
 
-    def find_by_poll_uid(self, poll_uid: str) -> Optional[Event]:
+    def find_by_poll_uid(self, poll_uid: str) -> Event:
         """Find an event by poll string."""
         event = next((e for e in self.list_events() if e.poll_uid == poll_uid), None)
         if not event:
-            raise ValueError(f"Event with poll uid {poll_uid} not found")
+            raise NotFoundError(detail={"resource": "event", "poll_uid": poll_uid})
         return event
 
 
@@ -101,7 +95,7 @@ class SapeurRepository:
         """Return all sapeurs."""
         df = self.storage.read_parquet(SAPEURS_FILE)
         if df.empty:
-            LOGGER.debug("No sapeurs found in storage.")
+            LOGGER.debug("sapeurs_empty")
             return []
         return [Sapeur(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")]
 
@@ -109,26 +103,25 @@ class SapeurRepository:
         """Insert or update a sapeur by uid."""
         saps = {s.uid: s for s in self.list_sapeurs()}
         if sapeur.uid in saps:
-            LOGGER.debug("Sapeur with uid %s already exists, skipping upsert.", sapeur.uid)
-            return None
+            LOGGER.debug("sapeur_exists", uid=sapeur.uid)
+            return
         saps[sapeur.uid] = sapeur
         df = pd.DataFrame([s.model_dump() for s in saps.values()])
         self.storage.atomic_write(df, SAPEURS_FILE)
-        return None
 
     def bulk_upsert(self, sapeurs: Iterable[Sapeur]) -> None:
         """Upsert multiple sapeurs."""
         current = {s.uid: s for s in self.list_sapeurs()}
-        new_sapeur = False
+        new_sap = False
         for sap in sapeurs:
-            if sap.uid not in current.keys():
+            if sap.uid not in current:
                 current[sap.uid] = sap
-                new_sapeur = True
-        if new_sapeur:
+                new_sap = True
+        if new_sap:
             df = pd.DataFrame([s.model_dump() for s in current.values()])
             self.storage.atomic_write(df, SAPEURS_FILE)
         else:
-            LOGGER.info("No new sapeurs to upsert.")
+            LOGGER.info("no_new_sapeurs")
 
     def delete(self, sapeur: Sapeur) -> None:
         """Delete a sapeur."""
@@ -146,14 +139,14 @@ class SapeurRepository:
         """Find a sapeur by name."""
         sapeur = next((s for s in self.list_sapeurs() if s.name == name), None)
         if not sapeur:
-            raise ValueError(f"Sapeur with name {name} not found")
+            raise NotFoundError(detail={"resource": "sapeur", "name": name})
         return sapeur
 
     def find_by_uid(self, uid: str) -> Sapeur:
         """Find by uid."""
         sapeur = next((s for s in self.list_sapeurs() if s.uid == uid), None)
         if not sapeur:
-            raise ValueError(f"Sapeur with uid {uid} not found")
+            raise NotFoundError(detail={"resource": "sapeur", "uid": uid})
         return sapeur
 
 
@@ -168,7 +161,7 @@ class VoteRepository:
         """Create empty vote storage (optionally overwriting existing)."""
         df = self.storage.read_parquet(VOTES_FILE)
         if df.empty or overwrite:
-            LOGGER.debug("Creating new vote storage at %s", VOTES_FILE)
+            LOGGER.debug("vote_storage_create")
             sapeur_repository = SapeurRepository()
             events_repository = EventRepository()
             columns = [evt.poll_string for evt in events_repository.list_events()]
@@ -180,7 +173,7 @@ class VoteRepository:
         """Return all vote rows."""
         df = self.storage.read_parquet(VOTES_FILE)
         if df.empty:
-            LOGGER.debug("No votes found in storage.")
+            LOGGER.debug("votes_empty")
             return []
         ensure_columns(df, ["poll_string", "voter_name", "vote"])
         return [VoteRecord(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")]
@@ -188,14 +181,13 @@ class VoteRepository:
     def upsert(self, vote: VoteRecord) -> None:
         """Insert or replace existing vote (unique by poll_string & voter_name)."""
         df = self.storage.read_parquet(VOTES_FILE)
-        if vote.vote is None:
-            value = None
-        elif vote.vote == "Présent":
+        value = None
+        if vote.vote == "Présent":
             value = True
         elif vote.vote == "Absent":
             value = False
-        else:
-            raise ValueError(f"Invalid vote value {vote.vote}")
+        elif vote.vote is not None:
+            raise NotFoundError(detail={"resource": "vote_value", "value": vote.vote})
         df.at[vote.voter_name, vote.poll_string] = value
         self.storage.atomic_write(df, VOTES_FILE)
 
@@ -217,7 +209,7 @@ class OnDutyRepository:
         """Create empty vote storage (optionally overwriting existing)."""
         df = self.storage.read_parquet(ONDUTY_FILE)
         if df.empty or overwrite:
-            LOGGER.debug("Creating new on-duty storage at %s", ONDUTY_FILE)
+            LOGGER.debug("onduty_storage_create")
             columns = [evt.poll_string for evt in self.events_repository.list_events()]
             index = [sap.name for sap in self.sapeur_repository.list_sapeurs()]
             df = pd.DataFrame(columns=columns, index=index)
@@ -227,14 +219,15 @@ class OnDutyRepository:
         """Return all on-duty rows."""
         df = self.storage.read_parquet(ONDUTY_FILE)
         if df.empty:
-            LOGGER.debug("No on-duty assignments found in storage.")
+            LOGGER.debug("onduty_empty")
             return []
         retour: List[OnDutyAssignment] = []
         for poll_string in df.columns:
-            sapeurs = [self.sapeur_repository.find_by_name(sap_name) for sap_name in df.index[df[poll_string].eq(True)].tolist()]
+            assigned_names = df.index[df[poll_string].eq(True)].tolist()
+            sapeurs = [self.sapeur_repository.find_by_name(n) for n in assigned_names]
             event = self.events_repository.find_by_poll_string(poll_string)
-            assigned = len(sapeurs) >= event.headcount
-            retour.append(OnDutyAssignment(event=event, sapeur_list=sapeurs, assigned=assigned))
+            assigned_flag = len(sapeurs) >= event.headcount
+            retour.append(OnDutyAssignment(event=event, sapeur_list=sapeurs, assigned=assigned_flag))
         return retour
 
     def write_assignment(self, assignment: OnDutyAssignment) -> None:
@@ -247,10 +240,18 @@ class OnDutyRepository:
     def list_for_poll(self, poll_string: str) -> List[Sapeur]:
         """List all assignments for a poll."""
         df = self.storage.read_parquet(ONDUTY_FILE)
-        return [self.sapeur_repository.find_by_name(sap_name) for sap_name in df.index[df[poll_string].eq(True)].tolist()]
+        if poll_string not in df.columns:
+            return []
+        return [self.sapeur_repository.find_by_name(n) for n in df.index[df[poll_string].eq(True)].tolist()]
 
     def is_assigned(self, poll_string: str) -> bool:
-        """Return True if the right number of person is assigned to the poll."""
+        """Return True if headcount requirement is satisfied for the poll."""
         df = self.storage.read_parquet(ONDUTY_FILE)
-        sapeurs = df.index[df[poll_string].eq(True)].tolist()
-        return len(sapeurs) != 0
+        if df.empty or poll_string not in df.columns:
+            return False
+        assigned_names = df.index[df[poll_string].eq(True)].tolist()
+        try:
+            event = self.events_repository.find_by_poll_string(poll_string)
+        except NotFoundError:
+            return False
+        return len(assigned_names) >= event.headcount

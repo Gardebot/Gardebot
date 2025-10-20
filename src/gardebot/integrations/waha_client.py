@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from gardebot.errors import ExternalServiceError
 from gardebot.http.http_client import HttpClient
@@ -34,45 +34,6 @@ class WahaClient:
             },
             retries=retries,
         )
-
-    def send_text(self, to_number: str, text: str) -> Dict[str, Any]:
-        """Send a text message to a WhatsApp number."""
-        payload = {"session": self.session, "chatId": to_number, "text": text}
-        resp = self._http.request("POST", "/api/sendText", json_body=payload, raise_for_status=True)
-        return self._extract_json_dict(resp)
-
-    def send_event(
-        self,
-        to_number: str,
-        name: str,
-        description: str,
-        start_time: int,
-        end_time: int,
-        location: str,
-        reply_to: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """Send a calendar event to a chat."""
-        payload = {
-            "chatId": to_number,
-            "event": {
-                "name": name,
-                "description": description,
-                "startTime": start_time,
-                "endTime": end_time,
-                "location": {"name": location},
-            },
-        }
-        if reply_to:
-            payload["reply_to"] = reply_to
-        endpoint = f"/api/{self.session}/events"
-        resp = self._http.request("POST", endpoint, json_body=payload, raise_for_status=True)
-        return self._extract_json_dict(resp)
-
-    def get_message(self, chat_id: str, message_id: str) -> Dict[str, Any]:
-        """Fetch a message by ID."""
-        endpoint = f"/api/{self.session}/chats/{chat_id}/messages/{message_id}"
-        resp = self._http.request("GET", endpoint, raise_for_status=True)
-        return self._extract_json_dict(resp)
 
     def _extract_json(self, resp: Any) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Extract JSON from response or raise ExternalServiceError."""

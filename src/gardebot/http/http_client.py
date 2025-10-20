@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import logging
 import random
 import time
 from typing import Any, Dict, Optional, Union
 
 import requests  # type: ignore[import-untyped]
 
+from gardebot.common.logging_configuration import get_logger
 from gardebot.errors import ExternalServiceError
 from gardebot.settings import settings
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 def _exponential_backoff(attempt: int, base: float, cap: float, jitter: bool = True) -> float:

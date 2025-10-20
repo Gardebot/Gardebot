@@ -1,346 +1,240 @@
-> NOTE: This repository was bootstrapped from the [🍪 CookieBlueprint](https://github.com/Julien-hae/CookieBlueprint). It extends that scaffold into a containerized WhatsApp automation service with a scheduled jobs companion.
-
 # Gardebot
 
-Gardebot is a Python 3.11 based service intended to interact with the WAHA (WhatsApp HTTP API) gateway and expose a small Flask-powered webhook & API layer while also running periodic background tasks (cron-like) via APScheduler.  
-It ships with a modern Python tooling stack: Poetry for dependency management, pre-commit automation, formatting (black + isort), linting (pylint), type checking (mypy), docstring style enforcement (pydocstyle), and coverage-aware test execution.  
-Secrets are injected at runtime using the Doppler CLI.
+Gardebot is a Python 3.11 WhatsApp automation service integrating WAHA (WhatsApp HTTP API) and Infomaniak Calendar to organize duty events (“gardes”), collect availability via polls, assign participants (“sapeurs”), and send reminders/convocations.
+
+Recent Refactor Highlights (this PR):
+- Exact event dispatch (no substring ambiguity) with debounced participant sync.
+- Correlation IDs on each webhook request (traceable across logs).
+- Scheduler activation for periodic event synchronization & holiday warnings.
+- Calendar parsing fixes (row-based NA dropping, improved duplicate naming).
+- Domain `NotFoundError` replacing generic `ValueError` in repositories.
+- Expanded Prometheus metrics (initialize, poll publish, vote processed).
+- Reduced service duplication via shared composition root (Gardebot).
+- Refined on-duty assignment logic: satisfaction based on headcount.
+- Cleaner logging bootstrap (single configuration point).
 
 ---
 
-## At a Glance
-
-| Aspect | Technology |
-|--------|------------|
-| Runtime | Python 3.11 |
-| Web Framework | Flask |
-| Scheduling | APScheduler |
-| Data / Utilities | numpy, pandas, pyarrow, holidays, regex, icalendar |
-| External Integration | WAHA (WhatsApp API), Doppler (secrets) |
-| Packaging | Poetry (wheel build during Docker image build) |
-| Quality Tooling | black, isort, pylint (+ sonarjson), mypy, pydocstyle, coverage |
-| Deployment | Multi-stage Dockerfile + docker-compose |
-| Entry Points | `python -m gardebot.app` (webhook/API), `python -m gardebot.scheduler` (cron-jobs), `poetry run entrypoint` (CLI) |
-
----
-
-## Repository Layout
-
-| Path / File | Purpose |
-|-------------|---------|
-| `src/gardebot/` | Python package containing application code (web app, scheduler, supporting modules). |
-| `tests/` | Test package (discovery by `unittest` / xmlrunner). |
-| `pyproject.toml` | Project metadata, dependencies, tool configuration (pylint, mypy, isort, etc.). |
-| `poetry.lock` | Locked dependency versions for reproducible installs. |
-| `Dockerfile` | Multi-stage build producing a slim runtime image with an embedded virtual environment. |
-| `docker-compose.yaml` | Orchestrates: WAHA gateway, main app (`gardebot`), and a `cron-jobs` scheduler container. |
-| `Makefile` | Developer convenience targets (environment bootstrap & cleanup). |
-| `.pre-commit-config.yaml` | Defines automated checks run before each commit. |
-| `.gitattributes`, `.gitignore` | Git hygiene and line ending consistency. |
-| `LICENSE` | Project license. |
-
----
-
-## Architectural Overview
-
-Gardebot is designed as three cooperating containers in `docker-compose.yaml`:
-
-1. `waha`  
-   - External WhatsApp gateway (image: `devlikeapro/waha:latest`).  
-   - Sends event callbacks (messages, poll votes, participant updates, session status) to `gardebot` via `WHATSAPP_HOOK_URL`.
-
-2. `gardebot`  
-   - Flask application exposing `/webhook` to accept WAHA event payloads.  
-   - Dispatches processing to methods of the `Gardebot` core object.  
-   - Runs under an unprivileged user (UID 1001).  
-   - Uses Doppler for secrets.
-
-3. `cron-jobs`  
-   - Executes `python -m gardebot.scheduler`.  
-   - Uses APScheduler to perform recurring tasks (reminders, sync, enrichments, etc.).  
-
----
-
-## Webhook Event Processing Logic (app.py)
-
-The central decision logic in `src/gardebot/app.py`:
-
-```python
-if "message" in data.get("event"):
-    gardebot.process_messages(data)
-elif "poll.vote" in data.get("event"):
-    gardebot.process_vote(data)
-elif "session.status" in data.get("event"):
-    if "WORKING" in data.get("payload").get("status"):
-        gardebot.initialize()
-elif "group.v2.participants" in data.get("event"):
-    threading.Timer(
-        SERVER_CONFIG["postpone_sync_time"],
-        gardebot.update_sapeurs,
-    ).start()
-else:
-    LOGGER.info("Unhandled webhook data shape: %s", data)
-```
-
-### Semantics
-
-| Event Fragment | Handler | Purpose |
-|----------------|---------|---------|
-| `message` | `process_messages` | Inbound chat messages (text / media / commands). |
-| `poll.vote` | `process_vote` | User participation in a WhatsApp poll. |
-| `session.status` (WORKING) | `initialize` | Re-run any startup routines (e.g., cache warmup, sync) once gateway session becomes operational. |
-| `group.v2.participants` | `update_sapeurs` (delayed) | Synchronize group participants after a postponement buffer to batch rapid membership changes. |
-| (other) | log only | Fallback for unexpected or new event types. |
-
----
-
-## Event Flow Diagrams
-
-### 1. High-Level Container Interaction
+## Architecture Overview
 
 ```mermaid
 flowchart LR
-    User((WhatsApp Users)) -->|Messages / Polls / Group Changes| WAHA[WAHA Gateway]
-    WAHA -->|Webhook POST| Flask[Gardebot Flask App /webhook]
-    Flask -->|Dispatch| Core[Gardebot Core Logic]
-    Core -->|Schedule / API Calls| WAHA
-    Cron[Cron Jobs Container] -->|Periodic Tasks| Core
-    Cron -->|Outgoing Actions| WAHA
+    subgraph External
+      WAHA[WAHA Gateway] -->|Webhook JSON| Flask[/Flask App /webhook/]
+      Cal[Infomaniak Calendar] --> EventService
+    end
+    Flask --> Dispatcher[EventDispatcher]
+    Dispatcher --> Core[Gardebot Root]
+    Core --> Adapters
+    Adapters --> WAHA
+    Core --> Services
+    Services --> Repositories[(Parquet via WebDAV)]
+    Cron[Scheduler Container] --> Core
 ```
 
-### 2. Webhook Dispatch Flow (Decision Tree)
-
-```mermaid
-flowchart TD
-    A[Webhook Event Received] --> B{event contains 'message'?}
-    B -->|Yes| M[process_messages()]
-    B -->|No| C{event contains 'poll.vote'?}
-    C -->|Yes| V[process_vote()]
-    C -->|No| D{event contains 'session.status'?}
-    D -->|Yes| E{payload.status includes 'WORKING'?}
-    E -->|Yes| I[initialize()]
-    E -->|No| X1[Ignore / Log]
-    D -->|No| G{event contains 'group.v2.participants'?}
-    G -->|Yes| T[Start Timer -> update_sapeurs()]
-    G -->|No| U[Log Unhandled]
-    M --> Z[Return success]
-    V --> Z
-    I --> Z
-    X1 --> Z
-    T --> Z
-    U --> Z
-```
-
-### 3. Sequence: Inbound Message
+### Request Lifecycle (Webhook)
 
 ```mermaid
 sequenceDiagram
-    participant W as WAHA
-    participant F as Flask /webhook
-    participant G as Gardebot Core
-    W->>F: POST /webhook (event="message", payload)
-    F->>G: process_messages(data)
-    G-->>G: Parse + classify message
-    G-->>W: (Optional) Reply via WAHA REST
-    F-->>W: 200 {"status": "success"}
+    participant WAHA
+    participant Flask
+    participant Dispatcher
+    participant Gardebot
+    participant Handler
+    WAHA->>Flask: POST /webhook (event=E)
+    Flask->>Flask: Generate correlation_id (UUID) & bind
+    Flask->>Dispatcher: dispatch(payload)
+    Dispatcher->>Handler: handler(payload) (exact match)
+    Handler-->>Dispatcher: done
+    Dispatcher-->>Flask: handled flag
+    Flask-->>WAHA: 200 JSON { correlation_id, handled }
 ```
 
-### 4. Sequence: Poll Vote
+### Debounced Participant Sync
 
 ```mermaid
 sequenceDiagram
-    participant W as WAHA
-    participant F as Flask
-    participant G as Gardebot Core
-    W->>F: POST event="poll.vote"
-    F->>G: process_vote(data)
-    G-->>G: Update poll state / analytics
-    F-->>W: 200
-```
-
-### 5. Sequence: Session Status Transition
-
-```mermaid
-sequenceDiagram
-    participant W as WAHA
-    participant F as Flask
-    participant G as Gardebot Core
-    W->>F: POST event="session.status" payload.status="WORKING"
-    F->>G: initialize()
-    G-->>G: Warm caches / sync baseline / load participants
-    F-->>W: 200
-```
-
-### 6. Sequence: Group Participants Update (Deferred Sync)
-
-```mermaid
-sequenceDiagram
-    participant W as WAHA
-    participant F as Flask
-    participant G as Gardebot Core
-    participant T as Timer Thread
-    W->>F: POST event="group.v2.participants"
-    F->>F: Start threading.Timer(delay=postpone_sync_time)
-    F-->>W: 200
-    T->>G: update_sapeurs()
-    G-->>G: Fetch & reconcile participant roster
-```
-
-### 7. ASCII Fallback Diagram (Dispatch)
-
-```
-[Webhook JSON] --> (Check 'event')
-   |-- contains "message" ----------> process_messages()
-   |-- contains "poll.vote" --------> process_vote()
-   |-- contains "session.status" ---> if status has WORKING -> initialize()
-   |-- contains "group.v2.participants" -> Timer(delay)-> update_sapeurs()
-   \-- else ------------------------> log "Unhandled webhook data shape"
+    participant WAHA
+    participant Flask
+    participant Dispatcher
+    participant Debouncer
+    participant SapeurService
+    WAHA->>Flask: POST event="group.v2.participants"
+    Flask->>Dispatcher: dispatch
+    Dispatcher->>Debouncer: trigger()
+    Note right of Debouncer: Delay resets if new event arrives
+    Debouncer->>SapeurService: synchronize_sapeurs()
+    SapeurService->>Repository: bulk_upsert + delete obsolete
 ```
 
 ---
 
-## Concurrency Notes
+## Components
 
-- `group.v2.participants` events may arrive in bursts (e.g., multiple joins). Deferring `update_sapeurs()` via `threading.Timer` helps collapse rapid-fire updates into a single sync.
-- All handlers run inside the Flask request thread (except the deferred sync). Keep per-request logic lightweight; offload heavier work to background jobs or the scheduler where appropriate.
-- If you introduce shared mutable state inside `Gardebot`, consider thread-safety (locks or isolation) since multiple webhook requests can be processed concurrently.
+| Layer | Modules | Notes |
+|-------|---------|-------|
+| Web | `app.py` | Correlation IDs, validation, metrics endpoint |
+| Dispatch | `dispatcher.py` | Exact event map, debounced initialize & participants |
+| Root | `gardebot.py` | Shared adapters + services, initialization instrumentation |
+| Adapters | `adapters/*.py` | WAHA operations (messaging, polling, groups, contacts) |
+| Services | `services/*.py` | Domain logic (events, votes, sapeurs, on-duty, nomination, messages) |
+| Integrations | `integrations/*.py` | WAHA client + Infomaniak calendar parsing |
+| Persistence | `repositories.py`, `common/storage.py` | Parquet over WebDAV (atomic write) |
+| Models | `models/domain.py`, `models/message_event.py` | Pydantic domain entities |
+| Observability | `metrics.py`, logging config | Prometheus counters/histograms, structlog |
+| Scheduling | `scheduler.py` | Cron jobs (sync events, holiday warnings) |
 
 ---
 
-## Local Development
+## Event Types (Current)
 
-### Prerequisites
+| Event Name | Handler | Purpose |
+|------------|---------|---------|
+| `message` | `Gardebot.handle_incoming_message` | Command/echo handling |
+| `poll.vote` | `Gardebot.process_vote` (→ PollingAdapter) | Availability voting |
+| `session.status` | Debounced `Gardebot.initialize` | Re-initialize on WORKING status |
+| `group.v2.participants` | Debounced `Gardebot.update_sapeurs` | Sync roster after membership changes |
 
-- Python build toolchain
-- `pyenv`
-- `poetry`
-- Docker & Docker Compose (optional but recommended)
-- Doppler CLI (for secret-managed flows)
+---
 
-### Bootstrapping
+## Metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `gardebot_webhook_events_total` | Counter | event, handled | Webhook events processed |
+| `gardebot_webhook_errors_total` | Counter | event, code | Error occurrences |
+| `gardebot_webhook_latency_seconds` | Histogram | event | Webhook handling latency |
+| `gardebot_participant_sync_total` | Counter | - | Participant sync executions |
+| `gardebot_initialize_total` | Counter | - | Initialization runs |
+| `gardebot_poll_publish_total` | Counter | status | Poll publish success/failure |
+| `gardebot_vote_processed_total` | Counter | result | Vote processing success/error |
+
+---
+
+## Persistence Model
+
+| File | Description | Repository |
+|------|-------------|------------|
+| `events.parquet` | Duty events (title, dates, headcount, poll metadata) | EventRepository |
+| `sapeurs.parquet` | Participant roster snapshot | SapeurRepository |
+| `votes.parquet` | Vote matrix (index=sapeur, columns=poll_string) | VoteRepository |
+| `on_duty.parquet` | Assignment matrix (index=sapeur, columns=poll_string) | OnDutyRepository |
+
+Limitation: Full DataFrame rewrite per mutation (future: normalized schema + DB backend).
+
+---
+
+## Configuration & Secrets
+
+- Typed settings: `settings.py` (server, api, logging, debounce).
+- Legacy constants: `config.py` (to be unified).
+- Secrets: via Doppler (`API_KEY`, `DOPPLER_TOKEN`, Kdrive credentials, calendar URL).
+- Correlation IDs bound via logging context for traceable diagnostics.
+
+---
+
+## Scheduler
+
+Activated in `cron-jobs` container:
+- `sync_events`: Daily calendar sync at 02:00 (Europe/Zurich).
+- `warn_holidays`: Holiday warning dispatch at 12:00.
+
+Extend with poll publication & reminder jobs in future iteration.
+
+---
+
+## Validation & Error Handling
+
+- Typed message event validated (`MessageEventEnvelope`).
+- Other events: minimal presence check (roadmap: typed envelopes).
+- Domain errors: `GardebotError`, `ExternalServiceError`, `ValidationError`, `NotFoundError`.
+- Repositories now raise `NotFoundError` for missing resources.
+
+---
+
+## Correlation IDs
+
+Each webhook request generates a UUID (`correlation_id`) included in responses and bound to the logging context for end-to-end traceability.
+
+---
+
+## Extensibility Guidelines
+
+1. Add new event:
+   - Define envelope (Pydantic).
+   - Register in dispatcher map.
+   - Implement handler on Gardebot or service.
+   - Add metric and README entry.
+
+2. Extend scheduler:
+   - Add function in `scheduler.py`.
+   - Configure cron expression.
+   - Instrument with `record_event`.
+
+3. Migrate persistence:
+   - Introduce row-based schema (poll_string, sapeur_uid, timestamp).
+   - Transition writes to SQLite/Postgres.
+
+4. Localization:
+   - Externalize French messages into resource files (planned).
+
+---
+
+## Testing (Recommended Coverage)
+
+| Area | Tests |
+|------|-------|
+| Dispatcher | Exact match success/failure, debounce timing |
+| Webhook | Correlation ID presence, invalid JSON, invalid event |
+| Repositories | NotFoundError raises, headcount assignment logic |
+| Calendar | Duplicate naming, NA row removal |
+| Metrics | Counters increment on publish/vote/initialize |
+| Scheduler | Job execution smoke tests (time mocking) |
+| Voting | Success path + missing poll_id / missing voter_id |
+| Sapeur Sync | Insert + delete with single fetch |
+
+---
+
+## Known Limitations / Technical Debt
+
+| Topic | Limitation | Planned |
+|-------|------------|---------|
+| Event validation | Only message typed | Typed envelopes for all events |
+| Persistence | Parquet rewrite, race risk | Introduce DB backend |
+| Admin vote | Not implemented | Add admin-specific logic |
+| Assignment logic | Publication vs assignment coupling | Separation & analytics |
+
+---
+
+## Quick Start
 
 ```bash
-git clone git@github.com:Julien-hae/Gardebot.git
-cd Gardebot
-make          # sets local Python 3.11, installs deps, pre-commit hooks
-poetry shell  # activate environment (if not auto-activated)
-```
-
-### Running
-
-```bash
-poetry run python -m gardebot.app          # Flask webhook service
-poetry run python -m gardebot.scheduler    # Scheduler (cron-jobs logic)
-poetry run entrypoint --help               # CLI entrypoint
-```
-
-### Docker Compose
-
-```bash
+make
+poetry run python -m gardebot.app
 docker compose up --build
-```
-
-Services: `waha`, `gardebot`, `cron-jobs`.
-
----
-
-## Quality & Tooling
-
-| Action | Command |
-|--------|---------|
-| Format | `poetry run black .` |
-| Imports | `poetry run isort .` |
-| Lint | `poetry run pylint src/gardebot` |
-| Types | `poetry run mypy` |
-| Docstrings | `poetry run pydocstyle` |
-| Tests | `poetry run coverage run -m xmlrunner discover --output-file junittest.xml` |
-| Pre-commit (all) | `poetry run pre-commit run --all-files` |
-
----
-
-## Building Docker Image
-
-```bash
-docker build -t gardebot:local .
-```
-
-Multi-stage build:
-1. Install Poetry + deps (runtime subset).
-2. Build wheel.
-3. Copy virtual environment to final slim image.
-4. Run as non-root (UID 1001).
-5. Entrypoint uses Doppler to inject secrets.
-
----
-
-## Environment Variables
-
-| Variable | Purpose | Example |
-|----------|---------|---------|
-| SERVER_HOST | Flask host bind | `0.0.0.0` |
-| SERVER_PORT | Flask port | `5000` |
-| SERVER_DEBUG | Flask debug flag | `false` |
-| LOG_LEVEL | App log level | `INFO` |
-| WAHA_BASE_URL | WAHA API URL | `http://waha:3000` |
-| WAHA_SESSION | WhatsApp session name | `default` |
-| TZ | Time zone in some containers | `Europe/Zurich` |
-| WHATSAPP_HOOK_URL | WAHA webhook target | `http://gardebot:5000/webhook` |
-| WHATSAPP_HOOK_EVENTS | Subscribed events | `message,poll.vote,session.status,group.v2.participants` |
-
-Secrets (tokens, API keys) are expected via Doppler or environment files referenced in `docker-compose.yaml`.
-
----
-
-## Extending Event Handling
-
-Add new handlers by:
-1. Updating the conditional chain (or refactor to a dispatch map).
-2. Implementing a corresponding method on `Gardebot`.
-3. Adding tests under `tests/gardebot/`.
-4. Documenting the new event in the Event Flow section.
-5. Considering debouncing or batching if high-frequency.
-
-Example refactor (future improvement):
-
-```python
-DISPATCH = {
-    "message": Gardebot.process_messages,
-    "poll.vote": Gardebot.process_vote,
-    "session.status": lambda g, d: g.initialize() if "WORKING" in d.get("payload", {}).get("status", "") else None,
-    "group.v2.participants": lambda g, d: threading.Timer(SERVER_CONFIG["postpone_sync_time"], g.update_sapeurs).start(),
-}
 ```
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| 400 on /webhook | Invalid JSON | Ensure WAHA payload format correct. |
-| Missing initialization effects | Session not yet WORKING | Wait for `session.status` with WORKING state. |
-| Multiple participant syncs | Rapid events | Adjust `postpone_sync_time`. |
-| No outgoing messages | WAHA_BASE_URL incorrect | Verify service name & network in compose. |
+| Symptom | Possible Cause | Fix |
+|---------|----------------|-----|
+| Missing correlation_id | Old code path or misconfigured route | Redeploy updated image |
+| Poll not publishing | Not yet due / already assigned | Check `scheduled_publication_date` & assignment |
+| Vote ignored | Poll already fully assigned | Verify OnDuty headcount satisfaction |
+| Empty events | Calendar URL unset | Set `CALENDAR_URL` or Doppler secret |
+| Participant sync delays | Debounce window | Adjust `POSTPONE_SYNC_TIME` env |
 
 ---
 
-## Contributing
+## Roadmap
 
-1. Branch from `master` (`feat/...`, `fix/...`).
-2. Keep commits focused.
-3. Ensure hooks pass (`pre-commit run --all-files`).
-4. Add or update tests for new logic.
-5. Provide diagrams if adding new event types.
-
----
-
-## Roadmap Ideas
-
-- Central event dispatcher replacing chained if/elif.
-- Structured logging (JSON) with correlation IDs per webhook request.
-- Persistence layer for message analytics / poll aggregation.
-- Web UI / admin dashboard for status & scheduling controls.
-- Retry / dead-letter queue for failed handlers.
+1. Typed envelopes for all event types.
+2. DB-backed persistence (transactional, scalable).
+3. Reminder & escalation workflows (automated).
+4. Participation analytics endpoint.
+5. Localization & multi-language poll strings.
 
 ---
 
@@ -352,11 +246,12 @@ See `LICENSE`.
 
 ## Acknowledgements
 
-- CookieBlueprint
+- CookieBlueprint scaffold
 - WAHA project
+- Infomaniak (Calendar & Kdrive)
 - Doppler
-- Python OSS ecosystem
+- Python OSS community
 
 ---
 
-Happy automating! 🛠️📨
+Happy automating! 🚀

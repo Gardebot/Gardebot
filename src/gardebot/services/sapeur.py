@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 from typing import List, Optional
 
+import pandas as pd  # type: ignore[import-untyped]
+
 from gardebot.adapters.groups import GroupAdapter
+from gardebot.common.logging_configuration import get_logger
 from gardebot.models.domain import Sapeur
 from gardebot.repositories import SapeurRepository
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 class SapeurService:
@@ -21,13 +23,13 @@ class SapeurService:
         self.group_adapter = GroupAdapter()
 
     def synchronize_sapeurs(self) -> None:
-        """Insert active sapeurs and remove those who quit."""
-        self.insert_active_sapeurs()
-        self.delete_sapeur_who_quit()
-
-    def insert_active_sapeurs(self) -> List[Sapeur]:
-        """Sync active sapeurs from group and upsert into repository (idempotent)."""
+        """Single fetch used for both insert and delete to avoid duplicate remote calls."""
         group_member_df = self.group_adapter.fetch_group_participants_table()
+        self._insert_active_sapeurs(group_member_df)
+        self._delete_sapeur_who_quit(group_member_df)
+
+    def _insert_active_sapeurs(self, group_member_df: pd.DataFrame) -> List[Sapeur]:
+        """Insert or update active sapeurs from group member DataFrame."""
         sapeurs: List[Sapeur] = []
         for _, row in group_member_df.iterrows():
             sapeur = Sapeur(
@@ -42,11 +44,10 @@ class SapeurService:
         self.repo.bulk_upsert(sapeurs)
         return sapeurs
 
-    def delete_sapeur_who_quit(self) -> None:
-        """Delete sapeur who has left the group."""
-        group_member_df = self.group_adapter.fetch_group_participants_table()
+    def _delete_sapeur_who_quit(self, group_member_df: pd.DataFrame) -> None:
+        """Delete sapeurs who have left the group."""
         current_sapeur_uid = group_member_df["uid"].to_list()
         sapeurs_who_quit = [sap for sap in self.repo.list_sapeurs() if sap.uid not in current_sapeur_uid]
         for sapeur in sapeurs_who_quit:
-            LOGGER.info("Deleting sapeur who quit: %s", sapeur.name)
+            LOGGER.info("deleting_sapeur", name=sapeur.name)
             self.repo.delete(sapeur)

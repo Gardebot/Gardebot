@@ -30,3 +30,11 @@ class ExternalServiceError(GardebotError):
     code = "external_service_error"
     http_status = 502
     safe_message = "Upstream service error."
+
+
+class NotFoundError(GardebotError):
+    """Error raised when a requested resource is not found."""
+
+    code = "not_found"
+    http_status = 404
+    safe_message = "Resource not found."
