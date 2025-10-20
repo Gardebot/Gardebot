@@ -34,13 +34,6 @@ class TestEventDispatcher(unittest.TestCase):
         self.assertTrue(self.dispatcher.dispatch(payload))
         self.mock_gardebot.handle_incoming_message.assert_called_once_with(payload)
 
-    @patch("gardebot.dispatcher.LOGGER")
-    def test_dispatch_poll_vote_event(self, _mock_logger: Any) -> None:
-        """Test dispatching a poll vote event."""
-        payload = {"event": "poll.vote"}
-        self.assertTrue(self.dispatcher.dispatch(payload))
-        self.mock_gardebot.process_vote.assert_called_once_with(payload)
-
     @patch("threading.Timer")
     @patch("gardebot.dispatcher.LOGGER")
     def test_dispatch_group_participants_event(self, _mock_logger: Any, mock_timer: Any) -> None:

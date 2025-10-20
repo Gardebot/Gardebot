@@ -45,6 +45,22 @@ class PollingAdapter:
         self._onduty_service = onduty_service or OnDutyService()
         self._sapeur_repo = sapeur_repository or SapeurRepository()
 
+    def _extract_from_number(self, data: Dict[str, Any]) -> str:
+        """Extract the sender's number from the webhook payload."""
+        payload = data.get("payload")
+        if not payload:
+            raise NotFoundError(detail={"resource": "payload", "data": data})
+        _data = payload.get("_data")
+        if not _data:
+            raise NotFoundError(detail={"resource": "_data", "payload": payload})
+        info = _data.get("Info")
+        if not info:
+            raise NotFoundError(detail={"resource": "Info", "_data": _data})
+        from_number: str = info.get("Chat")
+        if not from_number:
+            raise NotFoundError(detail={"resource": "Chat", "Info": info})
+        return from_number
+
     def send_poll(
         self,
         to_conv: str,
@@ -138,3 +154,8 @@ class PollingAdapter:
             LOGGER.error("vote_processing_error", error=str(exc))
             LOGGER.debug("vote_raw_event", raw=data)
             return None
+
+    def process_vote_from_admin(self, data: Dict[str, Any]) -> None:
+        """Process a vote event from the admin chat."""
+        # TODO: Implement admin vote logic
+        pass
