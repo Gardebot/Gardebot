@@ -124,7 +124,7 @@ class Event(BaseModel):
         if self.scheduled_publication_date.date() <= today:
             return True
 
-        return self.scheduled_publication_date.date() <= today and not self._is_published()
+        return False
 
     def with_poll_uid(self, poll_uid: str) -> "Event":
         """Return a new Event with poll_uid set (idempotent / protective)."""
