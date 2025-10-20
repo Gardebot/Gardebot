@@ -112,13 +112,19 @@ class Event(BaseModel):
         when_ts = when or pd.Timestamp.now(tz=geneva_tz)
         return self.model_copy(update={"published_date": when_ts})
 
-    def is_published(self) -> bool:
+    def _is_published(self) -> bool:
         """Check if the event has been published."""
         return self.published_date is not None
 
-    def is_assigned(self) -> bool:
-        """Check if the event has been assigned (has poll_uid)."""
-        return self.poll_uid is not None
+    def should_be_published(self) -> bool:
+        """Determine if the event is due for publication."""
+        if self._is_published():
+            return False
+        today = pd.Timestamp.now(tz=geneva_tz).date()
+        if self.scheduled_publication_date.date() <= today:
+            return True
+
+        return False
 
     def with_poll_uid(self, poll_uid: str) -> "Event":
         """Return a new Event with poll_uid set (idempotent / protective)."""

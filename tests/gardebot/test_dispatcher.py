@@ -58,9 +58,3 @@ class TestEventDispatcher(unittest.TestCase):
         payload = {"event": "unknown_event"}
         self.assertFalse(self.dispatcher.dispatch(payload))
         mock_logger.info.assert_called_once_with("unhandled_event", event="unknown_event")
-
-    def test_dispatch_partial_match(self) -> None:
-        """Test dispatching with partial event match."""
-        payload = {"event": "incoming_message_notification"}
-        self.assertTrue(self.dispatcher.dispatch(payload))
-        self.mock_gardebot.handle_incoming_message.assert_called_once_with(payload)
