@@ -187,7 +187,7 @@ class VoteRepository:
         elif vote.vote == "Absent":
             value = False
         elif vote.vote is not None:
-            raise NotFoundError(detail={"resource": "vote_value", "value": vote.vote})
+            raise ValueError(f"Invalid vote value: {vote.vote}")
         df.at[vote.voter_name, vote.poll_string] = value
         self.storage.atomic_write(df, VOTES_FILE)
 
