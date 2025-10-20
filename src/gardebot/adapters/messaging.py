@@ -156,8 +156,8 @@ class MessagingAdapter:
             name=event.title,
             description=event_description,
             location=event.location,
-            start_time=int(event.start_date.timestamp() * 1000),
-            end_time=int(event.end_date.timestamp() * 1000),
+            start_time=int(event.start_date.timestamp()),
+            end_time=int(event.end_date.timestamp()),
             reply_to=event.poll_uid,
         )
 
