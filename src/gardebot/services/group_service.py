@@ -32,7 +32,7 @@ class GroupService:
             if info:
                 rows.append(info)
             else:
-                LOGGER.warning("contact_info_missing", extra={"contact_id": cid}, exc_info=True)
+                LOGGER.warning("contact_info_missing", extra={"contact_id": cid})
         df = pd.DataFrame(rows)
         if not df.empty:
             df["joined_date"] = pd.Timestamp.now(tz="Europe/Zurich")
