@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import pytz  # type: ignore[import-untyped]
 
@@ -28,7 +28,7 @@ class PollService:
     def handle_webhook_payload(self, data: Dict[str, Any]) -> None:
         """Public entry point to process an inbound poll event."""
         try:
-            chat_id = self.polling._extract_from_number(data)
+            chat_id = self.polling._extract_chat_id_from_data(data)
             if chat_id == GROUP_ID_GARDE_ET_PIQUET:
                 LOGGER.debug("vote_received_group")
                 self.polling.process_vote_from_group(data)
@@ -44,3 +44,27 @@ class PollService:
             LOGGER.error("poll_processing_not_found_error", detail=nf.detail)
         except ExternalServiceError as exc:
             LOGGER.error("poll_processing_error_external", error=str(exc), detail=exc.detail, raw=data)
+
+    def publish_polls(self) -> None:
+        """Publish polls for upcoming events."""
+        event_list = self.polling._event_service.repo.list_events()
+        to_be_published = [evt for evt in event_list if self.polling.should_be_published(evt)]
+        LOGGER.debug("publishing_polls_start", count=len(to_be_published))
+        for evt in to_be_published:
+            LOGGER.debug("event_check", poll_string=evt.poll_string)
+            try:
+                poll_data = self.polling.send_poll(
+                    to_conv=GROUP_ID_GARDE_ET_PIQUET,
+                    poll_title=evt.poll_string,
+                    poll_options=["Absent", "Présent"],
+                    multiple_answers=False,
+                )
+            except ExternalServiceError as exc:
+                LOGGER.error("poll_publish_failed", poll_string=evt.poll_string, error=str(exc))
+                continue
+            _ = evt.mark_published()
+            poll_uid: Optional[str] = poll_data.get("id")
+            if not poll_uid:
+                raise NotFoundError(detail={"resource": "poll.id", "poll_data": poll_data})
+            self.polling._event_service.assign_poll_uid(evt=evt, poll_uid=poll_uid)
+            LOGGER.info("poll_published", poll_string=evt.poll_string, poll_id=poll_uid)
