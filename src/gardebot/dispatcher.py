@@ -7,7 +7,6 @@ from typing import Any, Callable, Dict
 from gardebot.common.debounce import Debouncer
 from gardebot.common.logging_configuration import get_logger
 from gardebot.gardebot import Gardebot
-from gardebot.metrics import record_participant_sync
 from gardebot.settings import settings
 
 LOGGER = get_logger(__name__)
@@ -61,7 +60,6 @@ class EventDispatcher:
 
     def _debounced_participant_sync(self) -> None:
         """Sync participants after debounce period."""
-        record_participant_sync()
         self.gardebot.sapeur_service.synchronize_sapeurs()
 
     def _debounced_initialize(self) -> None:

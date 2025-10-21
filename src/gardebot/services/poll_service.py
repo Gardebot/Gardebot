@@ -1,4 +1,4 @@
-"""Poll service: parsing, command routing, echo behavior."""
+"""Poll service operations."""
 
 from __future__ import annotations
 
@@ -18,10 +18,10 @@ TZ = pytz.timezone("Europe/Zurich")
 
 
 class PollService:
-    """Encapsulates POLL domain logic (parsing, command routing, vote behavior)."""
+    """Encapsulates poll-related operations with shared services injection."""
 
     def __init__(self, waha_client: Any) -> None:
-        """Sender: object providing send_text(to_number: str, message_text: str) and (optionally later) other message-related operations."""
+        """Initialize with shared WahaClient."""
         self.polling = PollingAdapter(waha_client=waha_client)
         self.messaging = MessageService(waha_client=waha_client)
 
