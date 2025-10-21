@@ -114,7 +114,7 @@ class PollingAdapter:
             event = self._extract_event_from_data(data)
             sapeur = self._extract_sapeur_from_payload(data)
             tmp_vote_value = self._extract_vote_value_from_data(data)
-            if tmp_vote_value not in list(VOTE_OPTIONS.keys()) + [None]:
+            if tmp_vote_value not in VOTE_OPTIONS and tmp_vote_value is not None:
                 raise ValueError(f"Invalid vote value {tmp_vote_value}")
             vote_value = VOTE_OPTIONS.get(tmp_vote_value) if tmp_vote_value else None
             vote = VoteRecord(event=event, sapeur=sapeur, value=vote_value)
