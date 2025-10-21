@@ -6,10 +6,10 @@ from typing import List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
 
-from gardebot.adapters.groups import GroupAdapter
 from gardebot.common.logging_configuration import get_logger
 from gardebot.models.domain import Sapeur
 from gardebot.repositories import SapeurRepository
+from gardebot.services.group_service import GroupService
 
 LOGGER = get_logger(__name__)
 
@@ -20,11 +20,11 @@ class SapeurService:
     def __init__(self, repository: Optional[SapeurRepository] = None) -> None:
         """Initialize with optional custom repository."""
         self.repo = repository or SapeurRepository()
-        self.group_adapter = GroupAdapter()
+        self.group_service = GroupService()
 
     def synchronize_sapeurs(self) -> None:
         """Single fetch used for both insert and delete to avoid duplicate remote calls."""
-        group_member_df = self.group_adapter.fetch_group_participants_table()
+        group_member_df = self.group_service.fetch_group_participants_table()
         self._insert_active_sapeurs(group_member_df)
         self._delete_sapeur_who_quit(group_member_df)
 

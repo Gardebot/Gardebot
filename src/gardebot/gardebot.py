@@ -48,7 +48,6 @@ class Gardebot:
         self.message_service = MessageService(waha_client=self.waha_client)
         self.poll_service = PollService(waha_client=self.waha_client)
 
-    # Inbound message
     def handle_incoming_message(self, data: Dict[str, Any]) -> None:
         """Handle an incoming message event."""
         self.message_service.handle_webhook_payload(data)
