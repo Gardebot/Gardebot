@@ -31,7 +31,7 @@ class VoteService:
 
     def list_absent(self, event: Event) -> List[Sapeur]:
         """List sapeur who voted Absent."""
-        return [v.sapeur for v in self.repo.list_by_poll(event) if not v.value]
+        return [v.sapeur for v in self.repo.list_by_poll(event) if v.value is False]
 
     def list_non_responding(self, event: Event, include_em: bool = False) -> List[Sapeur]:
         """List users who have not responded."""
