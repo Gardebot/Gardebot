@@ -10,12 +10,13 @@ import pandas as pd  # type: ignore[import-untyped]
 
 from gardebot.adapters.polling import PollingAdapter
 from gardebot.common.logging_configuration import get_logger
-from gardebot.config import GROUP_ID_GARDE_ET_PIQUET, PREVENTION_DAY_BEFORE_HOLIDAY
+from gardebot.config import PREVENTION_DAY_BEFORE_HOLIDAY
 from gardebot.integrations.waha_client import WahaClient
-from gardebot.metrics import record_initialize, record_vote_processed
+from gardebot.metrics import record_initialize
 from gardebot.services.events import EventService
 from gardebot.services.message_service import MessageService
 from gardebot.services.onduty import OnDutyService
+from gardebot.services.poll_service import PollService
 from gardebot.services.sapeur import SapeurService
 from gardebot.services.votes import VoteService
 from gardebot.settings import settings
@@ -45,11 +46,16 @@ class Gardebot:
         self.onduty_service = OnDutyService()
         self.sapeur_service = SapeurService()
         self.message_service = MessageService(waha_client=self.waha_client)
+        self.poll_service = PollService(waha_client=self.waha_client)
 
     # Inbound message
     def handle_incoming_message(self, data: Dict[str, Any]) -> None:
         """Handle an incoming message event."""
         self.message_service.handle_webhook_payload(data)
+
+    def handle_incoming_vote(self, data: Dict[str, Any]) -> None:
+        """Handle an incoming vote event."""
+        self.poll_service.handle_webhook_payload(data)
 
     def initialize(self) -> None:
         """Initialize Gardebot by syncing events, sapeurs, votes, and on-duty data."""
@@ -63,35 +69,6 @@ class Gardebot:
             LOGGER.debug("gardebot_initialize_complete")
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("gardebot_initialize_error", error=str(exc))
-
-    def process_vote(self, data: Dict[str, Any]) -> None:
-        """Process an incoming vote event."""
-        payload = data.get("payload")
-        _data = payload.get("_data") if payload else None
-        info = _data.get("Info") if _data else None
-        chat_id = info.get("Chat") if info else None
-        try:
-            if chat_id is None:
-                LOGGER.info("vote_missing_chat_id")
-            elif chat_id == GROUP_ID_GARDE_ET_PIQUET:
-                LOGGER.debug("vote_received_group")
-                poll_string = self.polling.process_vote_from_group(data)
-                if poll_string:
-                    record_vote_processed("success")
-            elif os.environ.get("ADMIN_NUMBER") in chat_id:
-                LOGGER.debug("vote_received_admin")
-                self.process_vote_from_admin(data)
-                record_vote_processed("success")
-            else:
-                LOGGER.info("vote_unknown_chat_id", chat_id=chat_id)
-        except Exception as exc:  # noqa: BLE001
-            record_vote_processed("error")
-            LOGGER.error("vote_processing_error_root", error=str(exc))
-
-    def process_vote_from_admin(self, data: Dict[str, Any]) -> None:
-        """Process a vote event from the admin chat."""
-        # TODO: Implement admin vote logic
-        pass
 
     def _notify_admin(self, message: str) -> None:
         self.message_service.messaging.send_text(to_number=os.environ.get("ADMIN_NUMBER", ""), text=message)

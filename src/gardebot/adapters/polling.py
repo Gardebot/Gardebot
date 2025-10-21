@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+import pandas as pd  # type: ignore[import-untyped]
 import pytz  # type: ignore[import-untyped]
 
 from gardebot.common.logging_configuration import get_logger
-from gardebot.config import GROUP_ID_GARDE_ET_PIQUET
-from gardebot.errors import ExternalServiceError, NotFoundError
+from gardebot.config import VOTE_OPTIONS
+from gardebot.errors import NotFoundError
 from gardebot.integrations.waha_client import WahaClient
-from gardebot.metrics import record_poll_publish, record_vote_processed
+from gardebot.models.domain import Event, Sapeur
 from gardebot.repositories import SapeurRepository
 from gardebot.services.events import EventService
 from gardebot.services.onduty import OnDutyService
@@ -18,7 +19,8 @@ from gardebot.services.votes import VoteService
 from gardebot.settings import settings
 
 LOGGER = get_logger(__name__)
-TZ = pytz.timezone("Europe/Zurich")
+
+geneva_tz = pytz.timezone("Europe/Zurich")
 
 
 class PollingAdapter:
@@ -45,6 +47,110 @@ class PollingAdapter:
         self._onduty_service = onduty_service or OnDutyService()
         self._sapeur_repo = sapeur_repository or SapeurRepository()
 
+    def _extract_payload_from_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract the payload dictionary from the webhook data."""
+        tmp_payload = data.get("payload")
+        if not tmp_payload:
+            raise NotFoundError(detail={"resource": "payload", "data": data})
+        payload: Dict[str, Any] = tmp_payload
+        return payload
+
+    def _extract_info_from_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract the Info dictionary from the webhook payload."""
+        payload = self._extract_payload_from_data(data)
+        _data = payload.get("_data")
+        if not _data:
+            raise NotFoundError(detail={"resource": "_data", "payload": payload})
+        info: Dict[str, Any] = _data.get("Info")
+        if not info:
+            raise NotFoundError(detail={"resource": "Info", "_data": _data})
+        return info
+
+    def _extract_chat_id_from_data(self, data: Dict[str, Any]) -> str:
+        """Extract the ChatId where the vote happened from the webhook payload."""
+        info = self._extract_info_from_data(data)
+        from_number: Optional[str] = info.get("Chat")
+        if not from_number:
+            raise NotFoundError(detail={"resource": "Chat", "Info": info})
+        return from_number
+
+    def _extract_sapeur_from_payload(self, data: Dict[str, Any]) -> Sapeur:
+        """Extract the sapeur object from the webhook payload."""
+        info = self._extract_info_from_data(data)
+        tmp_voter_id = info.get("SenderAlt")
+        if not tmp_voter_id:
+            raise NotFoundError(detail={"resource": "SenderAlt", "Info": info})
+        voter_id = tmp_voter_id.split("@")[0] + "@c.us"
+        sapeur = self._sapeur_repo.find_by_uid(voter_id)
+        return sapeur
+
+    def _extract_vote_value_from_data(self, data: Dict[str, Any]) -> Optional[str]:
+        """Extract the vote value from the webhook payload."""
+        payload = self._extract_payload_from_data(data)
+        vote_obj = payload.get("vote")
+        if not vote_obj:
+            raise NotFoundError(detail={"resource": "vote", "payload": payload})
+        selected_options = vote_obj.get("selectedOptions")
+        if selected_options is None:
+            raise NotFoundError(detail={"resource": "vote.selectedOptions", "vote": vote_obj})
+        vote_value: Optional[str] = selected_options[0] if selected_options else None
+        return vote_value
+
+    def _extract_event_from_data(self, data: Dict[str, Any]) -> Event:
+        """Extract the event object associated with the vote from the webhook payload."""
+        payload = self._extract_payload_from_data(data)
+        poll_obj = payload.get("poll")
+        if not poll_obj:
+            raise NotFoundError(detail={"resource": "poll", "payload": payload})
+        poll_id = poll_obj.get("id")
+        if not poll_id:
+            raise NotFoundError(detail={"resource": "poll.id", "poll": poll_obj})
+        event = self._event_service.repo.find_by_poll_uid(poll_id)
+        return event
+
+    def process_vote_from_group(self, data: Dict[str, Any]) -> Optional[str]:
+        """Process a vote event from the group; return poll_string if processed."""
+        try:
+            event = self._extract_event_from_data(data)
+            sapeur = self._extract_sapeur_from_payload(data)
+            vote_value = self._extract_vote_value_from_data(data)
+            if vote_value not in [None] + VOTE_OPTIONS:
+                LOGGER.debug("vote_ignored_invalid_value", vote_value=vote_value)
+                return None
+            if self._onduty_service.is_assigned(poll_string=event.poll_string):
+                LOGGER.debug("vote_poll_already_assigned", poll_string=event.poll_string)
+                return None
+            self._vote_service.record_vote(poll_string=event.poll_string, voter_name=sapeur.name, value=vote_value)
+            LOGGER.info("vote_processed", voter=sapeur.name, poll_string=event.poll_string, vote=vote_value)
+            return event.poll_string
+        except NotFoundError as nf:
+            LOGGER.error("vote_not_found_error", detail=nf.detail)
+            return None
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.error("vote_processing_error", error=str(exc))
+            LOGGER.debug("vote_raw_event", raw=data)
+            return None
+
+    def process_vote_from_admin(self, data: Dict[str, Any]) -> None:
+        """Process a vote event from the admin chat."""
+        # TODO: Implement admin vote logic
+        pass
+
+    def should_be_published(self, event: Event) -> bool:
+        """Determine if the event is due for publication."""
+        if event.is_published():
+            LOGGER.debug("event_already_published", poll_string=event.poll_string)
+            return False
+        today = pd.Timestamp.now(tz=geneva_tz).date()
+        if event.scheduled_publication_date.date() > today:
+            LOGGER.debug("event_not_due_yet", poll_string=event.poll_string)
+            return False
+        if self._onduty_service.is_assigned(poll_string=event.poll_string):  # TODO: change to is_published() when separation is done
+            LOGGER.debug("poll_already_assigned", poll_string=event.poll_string)
+            return False
+
+        return True
+
     def send_poll(
         self,
         to_conv: str,
@@ -67,74 +173,3 @@ class PollingAdapter:
         data = self._client._extract_json_dict(resp)  # noqa: SLF001
         LOGGER.info("poll_sent", to=to_conv, poll_id=data.get("id"))
         return data
-
-    def publish_polls(self) -> None:
-        """Publish polls for upcoming events."""
-        event_list = self._event_service.repo.list_events()
-        for evt in event_list:
-            LOGGER.debug("event_check", poll_string=evt.poll_string)
-            if not evt.should_be_published():
-                LOGGER.debug("poll_not_due_for_publication", poll_string=evt.poll_string)
-                continue
-            if self._onduty_service.is_assigned(poll_string=evt.poll_string):  # TODO: change to is_published() when separation is done
-                LOGGER.debug("poll_already_assigned", poll_string=evt.poll_string)
-                continue
-            try:
-                poll_data = self.send_poll(
-                    to_conv=GROUP_ID_GARDE_ET_PIQUET,
-                    poll_title=evt.poll_string,
-                    poll_options=["Absent", "Présent"],
-                    multiple_answers=False,
-                )
-            except ExternalServiceError as exc:
-                record_poll_publish("failure")
-                LOGGER.error("poll_publish_failed", poll_string=evt.poll_string, error=str(exc))
-                continue
-            _ = evt.mark_published()
-            if not poll_data.get("id"):
-                record_poll_publish("failure")
-                LOGGER.error("poll_publish_no_id", poll_string=evt.poll_string)
-                continue
-            poll_uid: str = poll_data.get("id", "")
-            self._event_service.assign_poll_uid(evt=evt, poll_uid=poll_uid)
-            record_poll_publish("success")
-            LOGGER.info("poll_published", poll_string=evt.poll_string, poll_id=poll_uid)
-
-    def process_vote_from_group(self, data: Dict[str, Any]) -> Optional[str]:
-        """Process a vote event from the group; return poll_string if processed."""
-        try:
-            payload = data.get("payload") or {}
-            _data = payload.get("_data") or {}
-            info = _data.get("Info") or {}
-            tmp_voter_id = info.get("SenderAlt")
-            if not tmp_voter_id:
-                LOGGER.warning("vote_missing_sender_alt")
-                return None
-            voter_id = tmp_voter_id.split("@")[0] + "@c.us"
-            poll_obj = payload.get("poll") or {}
-            poll_id = poll_obj.get("id")
-            if not poll_id:
-                LOGGER.warning("vote_missing_poll_id")
-                return None
-            event = self._event_service.repo.find_by_poll_uid(poll_id)
-            poll_string = event.poll_string
-            if self._onduty_service.is_assigned(poll_string=poll_string):
-                LOGGER.debug("vote_poll_already_assigned", poll_string=poll_string)
-                return None
-            voter = self._sapeur_repo.find_by_uid(voter_id).name
-            vote_payload = payload.get("vote") or {}
-            selected_options = vote_payload.get("selectedOptions", [])
-            vote_value = selected_options[0] if selected_options else None
-            self._vote_service.record_vote(poll_string=poll_string, voter_name=voter, value=vote_value)
-            record_vote_processed("success")
-            LOGGER.info("vote_processed", voter=voter, poll_string=poll_string, vote=vote_value)
-            return poll_string
-        except NotFoundError as nf:
-            record_vote_processed("error")
-            LOGGER.error("vote_not_found_error", detail=nf.detail)
-            return None
-        except Exception as exc:  # noqa: BLE001
-            record_vote_processed("error")
-            LOGGER.error("vote_processing_error", error=str(exc))
-            LOGGER.debug("vote_raw_event", raw=data)
-            return None

@@ -10,6 +10,7 @@ import pytz  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from gardebot.common.common import _format_french_date
+from gardebot.common.logging_configuration import get_logger
 from gardebot.config import (
     MAX_NB_REMINDER,
     MINIMUM_ELAPSED_HOURS,
@@ -17,6 +18,7 @@ from gardebot.config import (
 )
 
 geneva_tz = pytz.timezone("Europe/Zurich")
+LOGGER = get_logger(__name__)
 
 
 class Sapeur(BaseModel):
@@ -112,19 +114,9 @@ class Event(BaseModel):
         when_ts = when or pd.Timestamp.now(tz=geneva_tz)
         return self.model_copy(update={"published_date": when_ts})
 
-    def _is_published(self) -> bool:
+    def is_published(self) -> bool:
         """Check if the event has been published."""
         return self.published_date is not None
-
-    def should_be_published(self) -> bool:
-        """Determine if the event is due for publication."""
-        if self._is_published():
-            return False
-        today = pd.Timestamp.now(tz=geneva_tz).date()
-        if self.scheduled_publication_date.date() <= today:
-            return True
-
-        return False
 
     def with_poll_uid(self, poll_uid: str) -> "Event":
         """Return a new Event with poll_uid set (idempotent / protective)."""

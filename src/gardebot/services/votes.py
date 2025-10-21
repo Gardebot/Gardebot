@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import List
 
-from gardebot.config import EM_NAME
+from gardebot.config import EM_NAME, VOTE_OPTIONS
 from gardebot.models.domain import Event, VoteRecord
 from gardebot.repositories import VoteRepository
 
@@ -22,7 +22,7 @@ class VoteService:
     def record_vote(self, poll_string: str, voter_name: str, value: str | None) -> VoteRecord:
         """Record a vote (Présent / Absent / None)."""
         LOGGER.info("Recording vote for %s: %s voted %s", poll_string, voter_name, value)
-        if value not in ("Présent", "Absent", None):
+        if value not in [None] + VOTE_OPTIONS:
             raise ValueError(f"Invalid vote value {value}")
         rec = VoteRecord(poll_string=poll_string, voter_name=voter_name, vote=value)
         self.repo.upsert(rec)
