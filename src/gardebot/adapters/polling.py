@@ -8,6 +8,7 @@ import pandas as pd  # type: ignore[import-untyped]
 import pytz  # type: ignore[import-untyped]
 
 from gardebot.common.logging_configuration import get_logger
+from gardebot.config import VOTE_OPTIONS
 from gardebot.errors import NotFoundError
 from gardebot.integrations.waha_client import WahaClient
 from gardebot.models.domain import Event, Sapeur
@@ -113,7 +114,7 @@ class PollingAdapter:
             event = self._extract_event_from_data(data)
             sapeur = self._extract_sapeur_from_payload(data)
             vote_value = self._extract_vote_value_from_data(data)
-            if vote_value not in ["Présent", "Absent", None]:
+            if vote_value not in [None] + VOTE_OPTIONS:
                 LOGGER.debug("vote_ignored_invalid_value", vote_value=vote_value)
                 return None
             if self._onduty_service.is_assigned(poll_string=event.poll_string):

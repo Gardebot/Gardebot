@@ -9,7 +9,7 @@ import pytz  # type: ignore[import-untyped]
 
 from gardebot.adapters.polling import PollingAdapter
 from gardebot.common.logging_configuration import get_logger
-from gardebot.config import GROUP_ID_GARDE_ET_PIQUET
+from gardebot.config import GROUP_ID_GARDE_ET_PIQUET, VOTE_OPTIONS
 from gardebot.errors import ExternalServiceError, NotFoundError
 from gardebot.services.message_service import MessageService
 
@@ -37,7 +37,7 @@ class PollService:
                 self.polling.process_vote_from_admin(data)
             else:
                 LOGGER.info("vote_unknown_chat_id", chat_id=chat_id)
-                self.messaging.send_text(
+                self.messaging.messaging.send_text(
                     to_number=os.environ.get("ADMIN_NUMBER", ""), text=f"Vote received from unknown chat_id: {chat_id}"
                 )
         except NotFoundError as nf:
@@ -56,7 +56,7 @@ class PollService:
                 poll_data = self.polling.send_poll(
                     to_conv=GROUP_ID_GARDE_ET_PIQUET,
                     poll_title=evt.poll_string,
-                    poll_options=["Absent", "Présent"],
+                    poll_options=VOTE_OPTIONS,
                     multiple_answers=False,
                 )
             except ExternalServiceError as exc:

@@ -15,7 +15,7 @@ EVENTS_FILE = "events"
 SAPEURS_FILE = "sapeurs"
 VOTES_FILE = "votes"
 ONDUTY_FILE = "on_duty"
-
+VOTE_OPTIONS = ["Absent", "Présent"]
 
 MONTHS_FR = {
     1: "janvier",
