@@ -37,7 +37,7 @@ class PollService:
                 self.polling.process_vote_from_admin(data)
             else:
                 LOGGER.info("vote_unknown_chat_id", chat_id=chat_id)
-                self.messaging.messaging.send_text(
+                self.messaging.send_text(
                     to_number=os.environ.get("ADMIN_NUMBER", ""), text=f"Vote received from unknown chat_id: {chat_id}"
                 )
         except NotFoundError as nf:
