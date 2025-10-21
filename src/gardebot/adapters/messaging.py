@@ -11,7 +11,7 @@ from gardebot.common.logging_configuration import get_logger
 from gardebot.config import EM_NAME, GROUP_ID_GARDE_ET_PIQUET
 from gardebot.errors import ExternalServiceError
 from gardebot.integrations.waha_client import WahaClient
-from gardebot.models.domain import Event
+from gardebot.models.domain import Event, Sapeur
 from gardebot.repositories import SapeurRepository
 from gardebot.services.events import EventService
 from gardebot.services.votes import VoteService
@@ -86,11 +86,10 @@ class MessagingAdapter:
     def _build_mentions_payload(
         self,
         to_number: str,
-        name_list: List[str],
+        sapeur_list: List[Sapeur],
         reply_to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Build payload with mentions for given sapeur names."""
-        sapeur_list = [self._sapeur_repo.find_by_name(name) for name in name_list]
         mentions = [sap.uid for sap in sapeur_list]
         text_mention = ", ".join(["@" + sap.phone[1:] for sap in sapeur_list])
         payload: Dict[str, Any] = {
@@ -109,41 +108,38 @@ class MessagingAdapter:
         resp = self._client._http.request("POST", endpoint, json_body=payload, raise_for_status=True)  # noqa: SLF001
         return self._client._extract_json_dict(resp)  # noqa: SLF001
 
-    def _build_vote_reminder_payload(self, poll_string: str) -> Optional[Dict[str, Any]]:
+    def _build_vote_reminder_payload(self, event: Event) -> Optional[Dict[str, Any]]:
         """Build payload for vote reminder message."""
-        event = self._event_service.repo.find_by_poll_string(poll_string)
-        sapeur_name_to_send_reminder = [
-            name for name in self._vote_service.list_non_responding(poll_string=poll_string) if name not in EM_NAME
-        ]
-        if not sapeur_name_to_send_reminder:
+        sapeur_list = [sap for sap in self._vote_service.list_non_responding(event=event) if sap.name not in EM_NAME]
+        if len(sapeur_list) == 0:
             return None
         payload = self._build_mentions_payload(
             to_number=os.environ.get("ADMIN_NUMBER", ""),
-            name_list=sapeur_name_to_send_reminder,
+            sapeur_list=sapeur_list,
             reply_to=event.poll_uid,
         )
-        payload["text"] = f"Bonjour, merci à {payload['text']} de répondre au sondage - {poll_string} - associé :)"
+        payload["text"] = f"Bonjour, merci à {payload['text']} de répondre au sondage - {event.poll_string} - associé :)"
         return payload
 
-    def send_vote_reminder(self, poll_string: str) -> Dict[str, Any]:
+    def send_vote_reminder(self, event: Event) -> Dict[str, Any]:
         """Send reminder message; raises if no recipients or send fails."""
-        payload = self._build_vote_reminder_payload(poll_string=poll_string)
+        payload = self._build_vote_reminder_payload(event=event)
         if payload is None:
             raise ExternalServiceError(
                 "No recipients for reminder",
-                detail={"poll_string": poll_string},
+                detail={"poll_string": event.poll_string},
             )
-        LOGGER.info("sending_vote_reminder", poll_string=poll_string, to=payload.get("chatId"))
+        LOGGER.info("sending_vote_reminder", poll_string=event.poll_string, to=payload.get("chatId"))
         return self._post_json(self.endpoint, payload)
 
     def _send_group_convocation(
         self,
         to_number: str,
         event: Event,
-        on_duty_name: List[str],
+        sapeur_list: List[Sapeur],
     ) -> Dict[str, Any]:
         """Send group convocation message with mentions."""
-        payload = self._build_mentions_payload(to_number=to_number, name_list=on_duty_name, reply_to=event.poll_uid)
+        payload = self._build_mentions_payload(to_number=to_number, sapeur_list=sapeur_list, reply_to=event.poll_uid)
         payload["text"] = f"Merci à {payload['text']} pour la garde: {event.poll_string}. Vous êtes convoqué.e.s."
         LOGGER.info("sending_group_convocation", poll_string=event.poll_string, to=to_number)
         return self._post_json(self.endpoint, payload)
@@ -161,18 +157,17 @@ class MessagingAdapter:
             reply_to=event.poll_uid,
         )
 
-    def send_convocation(self, event: Event, on_duty_name: List[str]) -> Dict[str, Any]:
+    def send_convocation(self, event: Event, sapeur_list: List[Sapeur]) -> Dict[str, Any]:
         """Send convocation messages (group and private) to on-duty sapeurs."""
         if not event.poll_uid:
             raise ExternalServiceError("Missing poll ID for convocation", detail={"poll_string": event.poll_string})
         results: Dict[str, Any] = {"group": None, "private": []}
         results["group"] = self._send_group_convocation(
             to_number=GROUP_ID_GARDE_ET_PIQUET,
-            on_duty_name=on_duty_name,
+            sapeur_list=sapeur_list,
             event=event,
         )
-        for name in on_duty_name:
-            sap = self._sapeur_repo.find_by_name(name)
+        for sap in sapeur_list:
             try:
                 res = self._send_private_convocation(to_number=sap.phone, event=event)
                 results["private"].append({"to": sap.phone, "result": res})
@@ -184,5 +179,5 @@ class MessagingAdapter:
                     error=str(exc),
                 )
                 results["private"].append({"to": sap.phone, "error": str(exc)})
-        LOGGER.info("convocation_complete", poll_string=event.poll_string, on_duty=on_duty_name)
+        LOGGER.info("convocation_complete", poll_string=event.poll_string, on_duty=[s.name for s in sapeur_list])
         return results

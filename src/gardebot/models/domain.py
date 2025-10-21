@@ -128,9 +128,9 @@ class Event(BaseModel):
 class VoteRecord(BaseModel):
     """Represents a single vote row (normalized storage)."""
 
-    poll_string: str
-    voter_name: str
-    vote: Optional[str] = Field(None, description="One of: 'Présent', 'Absent', or None (no response).")
+    event: Event
+    sapeur: Sapeur
+    value: Optional[bool] = Field(None, description="One of: 'Présent'=True, 'Absent':False, or None (no response).")
 
 
 class OnDutyAssignment(BaseModel):
@@ -139,11 +139,3 @@ class OnDutyAssignment(BaseModel):
     event: Event
     sapeur_list: List[Sapeur]
     assigned: bool = True
-
-
-class ParticipationScore(BaseModel):
-    """Represents a computed participation score for nomination."""
-
-    sapeur_name: str
-    score: float
-    source: str  # e.g., 'non_responding' or 'absent'
