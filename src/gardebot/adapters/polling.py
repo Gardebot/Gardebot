@@ -11,7 +11,7 @@ from gardebot.common.logging_configuration import get_logger
 from gardebot.config import VOTE_OPTIONS
 from gardebot.errors import NotFoundError
 from gardebot.integrations.waha_client import WahaClient
-from gardebot.models.domain import Event, Sapeur
+from gardebot.models.domain import Event, Sapeur, VoteRecord
 from gardebot.repositories import SapeurRepository
 from gardebot.services.events import EventService
 from gardebot.services.onduty import OnDutyService
@@ -113,22 +113,19 @@ class PollingAdapter:
         try:
             event = self._extract_event_from_data(data)
             sapeur = self._extract_sapeur_from_payload(data)
-            vote_value = self._extract_vote_value_from_data(data)
-            if vote_value not in [None] + VOTE_OPTIONS:
-                LOGGER.debug("vote_ignored_invalid_value", vote_value=vote_value)
-                return None
-            if self._onduty_service.is_assigned(poll_string=event.poll_string):
-                LOGGER.debug("vote_poll_already_assigned", poll_string=event.poll_string)
-                return None
-            self._vote_service.record_vote(poll_string=event.poll_string, voter_name=sapeur.name, value=vote_value)
-            LOGGER.info("vote_processed", voter=sapeur.name, poll_string=event.poll_string, vote=vote_value)
+            tmp_vote_value = self._extract_vote_value_from_data(data)
+            if tmp_vote_value not in list(VOTE_OPTIONS.keys()) + [None]:
+                raise ValueError(f"Invalid vote value {tmp_vote_value}")
+            vote_value = VOTE_OPTIONS.get(tmp_vote_value) if tmp_vote_value else None
+            vote = VoteRecord(event=event, sapeur=sapeur, value=vote_value)
+            self._vote_service.record_vote(vote)
+            LOGGER.info("vote_processed", voter=sapeur.name, poll_string=event.poll_string, vote=tmp_vote_value)
             return event.poll_string
         except NotFoundError as nf:
             LOGGER.error("vote_not_found_error", detail=nf.detail)
             return None
         except Exception as exc:  # noqa: BLE001
-            LOGGER.error("vote_processing_error", error=str(exc))
-            LOGGER.debug("vote_raw_event", raw=data)
+            LOGGER.error("vote_processing_error", error=str(exc), data=data)
             return None
 
     def process_vote_from_admin(self, data: Dict[str, Any]) -> None:
@@ -145,7 +142,7 @@ class PollingAdapter:
         if event.scheduled_publication_date.date() > today:
             LOGGER.debug("event_not_due_yet", poll_string=event.poll_string)
             return False
-        if self._onduty_service.is_assigned(poll_string=event.poll_string):  # TODO: change to is_published() when separation is done
+        if self._onduty_service.is_assigned(event=event):  # TODO: change to is_published() when separation is done
             LOGGER.debug("poll_already_assigned", poll_string=event.poll_string)
             return False
 

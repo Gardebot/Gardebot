@@ -56,7 +56,7 @@ class PollService:
                 poll_data = self.polling.send_poll(
                     to_conv=GROUP_ID_GARDE_ET_PIQUET,
                     poll_title=evt.poll_string,
-                    poll_options=VOTE_OPTIONS,
+                    poll_options=list(VOTE_OPTIONS.keys()),
                     multiple_answers=False,
                 )
             except ExternalServiceError as exc:

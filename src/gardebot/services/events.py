@@ -53,21 +53,15 @@ class EventService:
         """Return all events."""
         return self.repo.list_events()
 
-    def mark_published(self, poll_string: str) -> Event:
+    def mark_published(self, event: Event) -> Event:
         """Set published date for event."""
-        evt = self.repo.find_by_poll_string(poll_string)
-        if not evt:
-            raise ValueError(f"Event {poll_string} not found")
-        updated = evt.mark_published()
+        updated = event.mark_published()
         self.repo.upsert_event(updated)
         return updated
 
-    def increment_reminder(self, poll_string: str) -> Event:
+    def increment_reminder(self, event: Event) -> Event:
         """Increment reminder count for event."""
-        evt = self.repo.find_by_poll_string(poll_string)
-        if not evt:
-            raise ValueError(f"Event {poll_string} not found")
-        updated = evt.increment_reminder()
+        updated = event.increment_reminder()
         self.repo.upsert_event(updated)
         return updated
 
