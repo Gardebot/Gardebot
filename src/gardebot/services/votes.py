@@ -27,7 +27,7 @@ class VoteService:
 
     def list_present(self, event: Event) -> List[Sapeur]:
         """List sapeur who voted Present."""
-        return [v.sapeur for v in self.repo.list_by_poll(event) if v.value]
+        return [v.sapeur for v in self.repo.list_by_poll(event) if v.value is True]
 
     def list_absent(self, event: Event) -> List[Sapeur]:
         """List sapeur who voted Absent."""
