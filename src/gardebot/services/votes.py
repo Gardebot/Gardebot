@@ -64,5 +64,5 @@ class VoteService:
         return False
 
     def test_event_completion(self, event: Event) -> bool:
-        """Test if an event can be proceed for assignment."""
+        """Test if an event can be processed for assignment."""
         return self.test_headcount_reached(event) or self.test_all_responded(event) or self.test_max_reminders(event)
