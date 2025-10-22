@@ -108,10 +108,13 @@ class PollingAdapter:
         event = self._event_service.repo.find_by_poll_uid(poll_id)
         return event
 
-    def process_vote_from_group(self, data: Dict[str, Any]) -> Optional[str]:
-        """Process a vote event from the group; return poll_string if processed."""
+    def process_vote_from_group(self, data: Dict[str, Any]) -> None:
+        """Process a vote event from the group; return event if processed."""
         try:
             event = self._extract_event_from_data(data)
+            if self._onduty_service.is_assigned(event=event):
+                LOGGER.info("vote_ignored_event_already_assigned", poll_string=event.poll_string)
+                return
             sapeur = self._extract_sapeur_from_payload(data)
             tmp_vote_value = self._extract_vote_value_from_data(data)
             if tmp_vote_value not in VOTE_OPTIONS and tmp_vote_value is not None:
@@ -119,14 +122,12 @@ class PollingAdapter:
             vote_value = VOTE_OPTIONS.get(tmp_vote_value) if tmp_vote_value else None
             vote = VoteRecord(event=event, sapeur=sapeur, value=vote_value)
             self._vote_service.record_vote(vote)
-            LOGGER.info("vote_processed", voter=sapeur.name, poll_string=event.poll_string, vote=tmp_vote_value)
-            return event.poll_string
+            if self._vote_service.test_event_completion(event):
+                LOGGER.info("event_ready_for_assignment", poll_string=event.poll_string)
         except NotFoundError as nf:
             LOGGER.error("vote_not_found_error", detail=nf.detail)
-            return None
         except Exception as exc:  # noqa: BLE001
             LOGGER.error("vote_processing_error", error=str(exc), data=data)
-            return None
 
     def process_vote_from_admin(self, data: Dict[str, Any]) -> None:
         """Process a vote event from the admin chat."""

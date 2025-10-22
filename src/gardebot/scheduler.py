@@ -6,9 +6,9 @@ from apscheduler.schedulers.blocking import (  # type: ignore[import-untyped]
     BlockingScheduler,
 )
 
-from gardebot.adapters.polling import PollingAdapter
 from gardebot.gardebot import Gardebot
 from gardebot.services.events import EventService
+from gardebot.services.poll_service import PollService
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -25,9 +25,17 @@ def sync_events() -> None:
 def publish_polls() -> None:
     """Publish polls for upcoming events."""
     LOGGER.info("Starting scheduled poll publication...")
-    poll_publisher = PollingAdapter()
+    poll_publisher = PollService()
     poll_publisher.publish_polls()
     LOGGER.info("Scheduled poll publication finished.")
+
+
+def send_assignments() -> None:
+    """Send on-duty assignments for events ready for assignment."""
+    LOGGER.info("Starting scheduled on-duty assignments...")
+    gardebot = Gardebot()
+    gardebot.assign_on_duty_for_events()
+    LOGGER.info("Scheduled on-duty assignments finished.")
 
 
 # def send_polls_reminder() -> None: # TODO: reactivate when needed
@@ -57,6 +65,7 @@ if __name__ == "__main__":
     scheduler = BlockingScheduler(timezone="Europe/Zurich")
     scheduler.add_job(sync_events, "cron", hour=2)
     scheduler.add_job(warn_holidays, "cron", hour=12)
+    scheduler.add_job(send_assignments, "cron", hour=12)
     # scheduler.add_job(send_polls_reminder, "cron", hour=10)
     scheduler.add_job(publish_polls, "cron", hour=9)
     try:

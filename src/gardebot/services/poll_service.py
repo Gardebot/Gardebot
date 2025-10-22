@@ -11,7 +11,9 @@ from gardebot.adapters.polling import PollingAdapter
 from gardebot.common.logging_configuration import get_logger
 from gardebot.config import GROUP_ID_GARDE_ET_PIQUET, VOTE_OPTIONS
 from gardebot.errors import ExternalServiceError, NotFoundError
+from gardebot.integrations.waha_client import WahaClient
 from gardebot.services.message_service import MessageService
+from gardebot.settings import settings
 
 LOGGER = get_logger(__name__)
 TZ = pytz.timezone("Europe/Zurich")
@@ -20,8 +22,16 @@ TZ = pytz.timezone("Europe/Zurich")
 class PollService:
     """Encapsulates poll-related operations with shared services injection."""
 
-    def __init__(self, waha_client: Any) -> None:
+    def __init__(self, waha_client: Any = None) -> None:
         """Initialize with shared WahaClient."""
+        if waha_client is None:
+            waha_client = WahaClient(
+                api_key=settings.api.api_key,
+                base_url=settings.api.base_url,
+                session=settings.api.session,
+                timeout=settings.api.timeout_seconds,
+                retries=settings.api.retry_attempts,
+            )
         self.polling = PollingAdapter(waha_client=waha_client)
         self.messaging = MessageService(waha_client=waha_client)
 
@@ -32,6 +42,7 @@ class PollService:
             if chat_id == GROUP_ID_GARDE_ET_PIQUET:
                 LOGGER.debug("vote_received_group")
                 self.polling.process_vote_from_group(data)
+                LOGGER.info("vote_processed", chat_id=chat_id)
             elif os.environ.get("ADMIN_NUMBER", "") in chat_id:
                 LOGGER.debug("vote_received_admin")
                 self.polling.process_vote_from_admin(data)

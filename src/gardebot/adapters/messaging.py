@@ -8,10 +8,10 @@ from typing import Any, Dict, List, Optional
 import pytz  # type: ignore[import-untyped]
 
 from gardebot.common.logging_configuration import get_logger
-from gardebot.config import EM_NAME, GROUP_ID_GARDE_ET_PIQUET
-from gardebot.errors import ExternalServiceError
+from gardebot.config import EM_NAME
+from gardebot.errors import NotFoundError
 from gardebot.integrations.waha_client import WahaClient
-from gardebot.models.domain import Event, Sapeur
+from gardebot.models.domain import Event, OnDutyAssignment, Sapeur
 from gardebot.repositories import SapeurRepository
 from gardebot.services.events import EventService
 from gardebot.services.votes import VoteService
@@ -50,30 +50,21 @@ class MessagingAdapter:
         payload = {"session": self._client.session, "chatId": to_number, "text": text}
         return self._post_json(self.endpoint, payload)
 
-    def send_event(
-        self,
-        to_number: str,
-        name: str,
-        description: str,
-        start_time: int,
-        end_time: int,
-        location: str,
-        reply_to: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    def send_event(self, to_number: str, event: Event) -> Dict[str, Any]:
         """Send a calendar event to a chat."""
-        LOGGER.debug("messaging.send_event", to=to_number, name=name, start_time=start_time, end_time=end_time)
+        LOGGER.debug("messaging.send_event", to=to_number, name=event.title, start_time=event.start_date, end_time=event.end_date)
         payload = {
             "chatId": to_number,
             "event": {
-                "name": name,
-                "description": description,
-                "startTime": start_time,
-                "endTime": end_time,
-                "location": {"name": location},
+                "name": event.title,
+                "description": f"Bonjour, vous êtes convoqué.e.s pour la garde : {event.poll_string}. Merci pour votre engagement :)",
+                "startTime": int(event.start_date.tz_localize(GENEVA_TZ).timestamp()),
+                "endTime": int(event.end_date.tz_localize(GENEVA_TZ).timestamp()),
+                "location": {"name": event.location},
             },
         }
-        if reply_to:
-            payload["reply_to"] = reply_to
+        if event.poll_uid:
+            payload["reply_to"] = event.poll_uid
         endpoint = f"/api/{self._client.session}/events"
         return self._post_json(endpoint, payload)
 
@@ -125,59 +116,24 @@ class MessagingAdapter:
         """Send reminder message; raises if no recipients or send fails."""
         payload = self._build_vote_reminder_payload(event=event)
         if payload is None:
-            raise ExternalServiceError(
+            raise NotFoundError(
                 "No recipients for reminder",
                 detail={"poll_string": event.poll_string},
             )
         LOGGER.info("sending_vote_reminder", poll_string=event.poll_string, to=payload.get("chatId"))
         return self._post_json(self.endpoint, payload)
 
-    def _send_group_convocation(
+    def send_group_convocation(
         self,
         to_number: str,
-        event: Event,
-        sapeur_list: List[Sapeur],
+        assignment: OnDutyAssignment,
     ) -> Dict[str, Any]:
         """Send group convocation message with mentions."""
-        payload = self._build_mentions_payload(to_number=to_number, sapeur_list=sapeur_list, reply_to=event.poll_uid)
-        payload["text"] = f"Merci à {payload['text']} pour la garde: {event.poll_string}. Vous êtes convoqué.e.s."
-        LOGGER.info("sending_group_convocation", poll_string=event.poll_string, to=to_number)
+        payload = self._build_mentions_payload(to_number=to_number, sapeur_list=assignment.sapeur_list, reply_to=assignment.event.poll_uid)
+        payload["text"] = f"Merci à {payload['text']} pour la garde: {assignment.event.poll_string}. Vous êtes convoqué.e.s."
+        LOGGER.info("sending_group_convocation", poll_string=assignment.event.poll_string, to=to_number)
         return self._post_json(self.endpoint, payload)
 
-    def _send_private_convocation(self, to_number: str, event: Event) -> Dict[str, Any]:
+    def send_private_convocation(self, to_number: str, event: Event) -> Dict[str, Any]:
         """Send private convocation message for an on-duty sapeur."""
-        event_description = f"Bonjour, vous êtes convoqué.e.s pour la garde : {event.poll_string}. Merci pour votre engagement."
-        return self.send_event(
-            to_number=to_number,
-            name=event.title,
-            description=event_description,
-            location=event.location,
-            start_time=int(event.start_date.timestamp()),
-            end_time=int(event.end_date.timestamp()),
-            reply_to=event.poll_uid,
-        )
-
-    def send_convocation(self, event: Event, sapeur_list: List[Sapeur]) -> Dict[str, Any]:
-        """Send convocation messages (group and private) to on-duty sapeurs."""
-        if not event.poll_uid:
-            raise ExternalServiceError("Missing poll ID for convocation", detail={"poll_string": event.poll_string})
-        results: Dict[str, Any] = {"group": None, "private": []}
-        results["group"] = self._send_group_convocation(
-            to_number=GROUP_ID_GARDE_ET_PIQUET,
-            sapeur_list=sapeur_list,
-            event=event,
-        )
-        for sap in sapeur_list:
-            try:
-                res = self._send_private_convocation(to_number=sap.phone, event=event)
-                results["private"].append({"to": sap.phone, "result": res})
-            except ExternalServiceError as exc:
-                LOGGER.error(
-                    "private_convocation_failed",
-                    to=sap.phone,
-                    poll_string=event.poll_string,
-                    error=str(exc),
-                )
-                results["private"].append({"to": sap.phone, "error": str(exc)})
-        LOGGER.info("convocation_complete", poll_string=event.poll_string, on_duty=[s.name for s in sapeur_list])
-        return results
+        return self.send_event(to_number=to_number, event=event)

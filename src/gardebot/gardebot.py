@@ -8,7 +8,6 @@ from typing import Any, Dict
 import holidays
 import pandas as pd  # type: ignore[import-untyped]
 
-from gardebot.adapters.polling import PollingAdapter
 from gardebot.common.logging_configuration import get_logger
 from gardebot.config import PREVENTION_DAY_BEFORE_HOLIDAY
 from gardebot.integrations.waha_client import WahaClient
@@ -37,10 +36,6 @@ class Gardebot:
             retries=settings.api.retry_attempts,
         )
 
-        # Adapters (shared)
-        self.polling = PollingAdapter(waha_client=self.waha_client)
-
-        # Services (shared)
         self.event_service = EventService()
         self.vote_service = VoteService()
         self.onduty_service = OnDutyService()
@@ -56,6 +51,27 @@ class Gardebot:
         """Handle an incoming vote event."""
         self.poll_service.handle_webhook_payload(data)
 
+    def assign_on_duty_for_events(self) -> None:
+        """Assign on-duty personnel for events ready for assignment."""
+        event_list = self.event_service.repo.list_events()
+        for event in event_list:
+            try:
+                if self.vote_service.test_event_completion(event):
+                    if not self.onduty_service.is_assigned(event):
+                        assignment = self.onduty_service.process_assignment(event)
+                        self.message_service.send_convocation(assignment=assignment)
+                        LOGGER.info(
+                            "onduty_assignment_completed",
+                            poll_string=event.poll_string,
+                            assigned_sapeurs=[s.name for s in assignment.sapeur_list],
+                        )
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.error(
+                    "onduty_assignment_error",
+                    poll_string=event.poll_string,
+                    error=str(exc),
+                )
+
     def initialize(self) -> None:
         """Initialize Gardebot by syncing events, sapeurs, votes, and on-duty data."""
         LOGGER.debug("gardebot_initialize_start")
@@ -63,7 +79,7 @@ class Gardebot:
             self.event_service.synchronize_events()
             self.sapeur_service.synchronize_sapeurs()
             self.vote_service.repo.create(overwrite=False)
-            self.onduty_service.repo.create(overwrite=False)
+            self.onduty_service.on_duty_repos.create(overwrite=False)
             record_initialize()
             LOGGER.debug("gardebot_initialize_complete")
         except Exception as exc:  # noqa: BLE001

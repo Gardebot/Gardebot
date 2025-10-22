@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import List
 
-from gardebot.config import EM_NAME
+from gardebot.config import EM_NAME, MAX_NB_REMINDER
 from gardebot.models.domain import Event, Sapeur, VoteRecord
 from gardebot.repositories import VoteRepository
 
@@ -41,3 +41,28 @@ class VoteService:
         if not include_em:
             non_responding = [n for n in non_responding if n.name not in EM_NAME]
         return non_responding
+
+    def test_headcount_reached(self, event: Event) -> bool:
+        """Test if headcount is reached for an event."""
+        if len(self.list_present(event)) >= event.headcount:
+            LOGGER.info("Headcount reached for %s", event.poll_string)
+            return True
+        return False
+
+    def test_all_responded(self, event: Event) -> bool:
+        """Test if all sapeurs have responded for an event."""
+        if len(self.list_non_responding(event, include_em=False)) == 0:
+            LOGGER.info("All sapeurs have voted to %s", event.poll_string)
+            return True
+        return False
+
+    def test_max_reminders(self, event: Event) -> bool:
+        """Test if maximum number of reminders is reached for an event."""
+        if event.nb_reminder >= MAX_NB_REMINDER:
+            LOGGER.info("Maximum number of reminders reached for %s", event.poll_string)
+            return True
+        return False
+
+    def test_event_completion(self, event: Event) -> bool:
+        """Test if an event can be proceed for assignment."""
+        return self.test_headcount_reached(event) or self.test_all_responded(event) or self.test_max_reminders(event)

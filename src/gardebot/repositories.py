@@ -194,6 +194,19 @@ class VoteRepository:
         """List votes for a single poll."""
         return [v for v in self.list_votes() if v.event.poll_string == evt.poll_string]
 
+    def get_vote_df(self, event_list: Optional[List[Event]] = None, sapeur_list: Optional[List[Sapeur]] = None) -> pd.DataFrame:
+        """Return the vote DataFrame, optionally filtered by events and/or sapeurs."""
+        df = self.storage.read_parquet(VOTES_FILE)
+
+        if event_list:
+            valid_polls = [event.poll_string for event in event_list if event.poll_string in df.columns]
+            df = df[valid_polls]
+        if sapeur_list:
+            sapeur_names = [sapeur.name for sapeur in sapeur_list if sapeur.name in df.index]
+            df = df.loc[sapeur_names]
+
+        return df
+
 
 class OnDutyRepository:
     """Persistence for on-duty assignments."""
@@ -205,17 +218,17 @@ class OnDutyRepository:
         self.sapeur_repository = SapeurRepository()
 
     def create(self, overwrite: bool = False) -> None:
-        """Create empty vote storage (optionally overwriting existing)."""
+        """Create empty on_duty storage (optionally overwriting existing)."""
         df = self.storage.read_parquet(ONDUTY_FILE)
         if df.empty or overwrite:
             LOGGER.debug("onduty_storage_create")
             columns = [evt.poll_string for evt in self.events_repository.list_events()]
             index = [sap.name for sap in self.sapeur_repository.list_sapeurs()]
-            df = pd.DataFrame(columns=columns, index=index)
+            df = pd.DataFrame(columns=columns, index=index).fillna(False)
             self.storage.atomic_write(df, ONDUTY_FILE)
 
     def list_assignments(self) -> List[OnDutyAssignment]:
-        """Return all on-duty rows."""
+        """Return all assignments."""
         df = self.storage.read_parquet(ONDUTY_FILE)
         if df.empty:
             LOGGER.debug("onduty_empty")
@@ -236,8 +249,8 @@ class OnDutyRepository:
             df.at[sap.name, assignment.event.poll_string] = True
         self.storage.atomic_write(df, ONDUTY_FILE)
 
-    def list_for_poll(self, assignment: OnDutyAssignment) -> List[Sapeur]:
-        """List all assignments for a poll."""
+    def list_assigned_sapeur(self, assignment: OnDutyAssignment) -> List[Sapeur]:
+        """List all assignments for an event."""
         df = self.storage.read_parquet(ONDUTY_FILE)
         if assignment.event.poll_string not in df.columns:
             return []
@@ -250,3 +263,16 @@ class OnDutyRepository:
             return False
         assigned_names = df.index[df[event.poll_string].eq(True)].tolist()
         return len(assigned_names) >= event.headcount
+
+    def get_onduty_df(self, event_list: Optional[List[Event]] = None, sapeur_list: Optional[List[Sapeur]] = None) -> pd.DataFrame:
+        """Return the OnDuty DataFrame, optionally filtered by events and/or sapeurs."""
+        df = self.storage.read_parquet(ONDUTY_FILE)
+
+        if event_list:
+            valid_polls = [event.poll_string for event in event_list if event.poll_string in df.columns]
+            df = df[valid_polls]
+        if sapeur_list:
+            sapeur_names = [sapeur.name for sapeur in sapeur_list if sapeur.name in df.index]
+            df = df.loc[sapeur_names]
+
+        return df

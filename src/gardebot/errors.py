@@ -38,3 +38,11 @@ class NotFoundError(GardebotError):
     code = "not_found"
     http_status = 404
     safe_message = "Resource not found."
+
+
+class AlreadyAssignedError(GardebotError):
+    """Error raised when an assignment is attempted on an already assigned event."""
+
+    code = "already_assigned"
+    http_status = 400
+    safe_message = "Event is already assigned."
