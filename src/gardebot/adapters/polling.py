@@ -169,7 +169,7 @@ class PollingAdapter(WahaClient):
         }
         LOGGER.debug("sending_poll", to=to_conv, title=poll_title)
         resp = self.post("/api/sendPoll", json_body=payload, raise_for_status=True)
-        data = self.extract_json_dict(resp)  # noqa: SLF001
+        data = self.extract_json_dict(resp)
         LOGGER.info("poll_sent", to=to_conv, poll_id=data.get("id"))
         return data
 
