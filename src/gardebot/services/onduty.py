@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import logging
 from typing import List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
 
+from gardebot.common.logging_configuration import get_logger
 from gardebot.config import EM_NAME
 from gardebot.errors import AlreadyAssignedError
 from gardebot.models.domain import Event, OnDutyAssignment, Sapeur
 from gardebot.repositories import OnDutyRepository
 from gardebot.services.votes import VoteService
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 class OnDutyService:
@@ -45,7 +45,7 @@ class OnDutyService:
 
     def _vote_score_pro_sapeur(self, event: Event, sapeur_list: Optional[List[Sapeur]] = None) -> pd.Series:
         """Score a sapeur for on-duty assignment based on its participation."""
-        vote_df = self.vote_service.repo.get_vote_df(sapeur_list=sapeur_list)
+        vote_df = self.vote_service.get_vote_df(sapeur_list=sapeur_list)
         return vote_df[event.poll_string].map({True: 1, False: 1, None: 0})
 
     def _assignment_score_pro_sapeur(self, sapeur_list: Optional[List[Sapeur]] = None) -> pd.Series:
@@ -99,10 +99,14 @@ class OnDutyService:
         present_sapeurs = self.vote_service.list_present(event)
         present_sapeurs_names = [sap.name for sap in present_sapeurs]
         nb_to_nominate = event.headcount - len(present_sapeurs)
-        all_sapeurs = self.on_duty_repos.sapeur_repository.list_sapeurs()
+        all_sapeurs = self.on_duty_repos.list_sapeurs()
         pending_sapeur = [sap for sap in all_sapeurs if sap.name not in present_sapeurs_names + EM_NAME]
         score_pending_sapeur = self._score_pro_sapeur(event=event, sapeur_list=pending_sapeur)
         selected_sapeurs_name = score_pending_sapeur.sort_values().iloc[:nb_to_nominate].index.tolist()
         selected_sapeurs = [sap for sap in pending_sapeur if sap.name in selected_sapeurs_name]
         assignment = self._assign(event=event, sapeurs=present_sapeurs + selected_sapeurs)
         return assignment
+
+    def create(self, overwrite: bool = False) -> None:
+        """Wrapper around create from repository."""
+        self.on_duty_repos.create(overwrite=overwrite)

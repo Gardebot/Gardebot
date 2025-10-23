@@ -2,25 +2,24 @@
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pandas as pd  # type: ignore[import-untyped]
 
 from gardebot.adapters.contacts import ContactAdapter
 from gardebot.adapters.groups import GroupAdapter
-from gardebot.integrations.waha_client import WahaClient
+from gardebot.common.logging_configuration import get_logger
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 class GroupService:
     """Encapsulates group-related WAHA interactions."""
 
-    def __init__(self, waha_client: Optional[WahaClient] = None) -> None:
+    def __init__(self) -> None:
         """Sender: object providing send_text(to_number: str, message_text: str) and (optionally later) other message-related operations."""
-        self.contact = ContactAdapter(waha_client=waha_client)
-        self.group = GroupAdapter(waha_client=waha_client)
+        self.contact = ContactAdapter()
+        self.group = GroupAdapter()
 
     def fetch_group_participants_table(self) -> pd.DataFrame:
         """Return DataFrame of participant contact info enriched with joined_date and group_id."""

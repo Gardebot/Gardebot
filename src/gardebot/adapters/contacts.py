@@ -2,31 +2,23 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, Optional
 
+from gardebot.common.logging_configuration import get_logger
 from gardebot.errors import ExternalServiceError
 from gardebot.integrations.waha_client import WahaClient
-from gardebot.settings import settings
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
-class ContactAdapter:
+class ContactAdapter(WahaClient):
     """Encapsulates contact-related WAHA interactions."""
 
     def __init__(
         self,
-        waha_client: Optional[WahaClient] = None,
     ) -> None:
         """Initialize with optional custom WahaClient."""
-        self._client = waha_client or WahaClient(
-            api_key=settings.api.api_key,
-            base_url=settings.api.base_url,
-            session=settings.api.session,
-            timeout=settings.api.timeout_seconds,
-            retries=settings.api.retry_attempts,
-        )
+        super().__init__()
 
     def get_contact_info(self, contact_id: str) -> Optional[Dict[str, Any]]:
         """Fetch contact information from the WAHA API.
@@ -34,9 +26,9 @@ class ContactAdapter:
         Returns:
             Dictionary of contact information
         """
-        endpoint = f"/api/contacts?contactId={contact_id}&session={self._client.session}"
+        endpoint = f"/api/contacts?contactId={contact_id}&session={self.session}"
         try:
-            response = self._client._http.request("GET", endpoint, raise_for_status=True)  # noqa: SLF001
+            response = self.get(endpoint, raise_for_status=True)
             LOGGER.debug("Contact info fetched successfully for contact %s", contact_id)
             contact_info: Dict[str, Any] = response.json()
             contact_info["phone"] = "+" + "".join([a for a in contact_id if a.isdigit()])  # Quick fix to add phone number

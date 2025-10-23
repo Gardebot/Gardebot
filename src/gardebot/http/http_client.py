@@ -90,16 +90,14 @@ class HttpClient:
             try:
                 LOGGER.debug(
                     "http_request",
-                    extra={
-                        "method": method.upper(),
-                        "url": url,
-                        "json_body": json_body,
-                        "params": params,
-                        "attempt": attempt,
-                        "retries": self.retries,
-                    },
-                    exc_info=True,
+                    method=method.upper(),
+                    url=url,
+                    json_body=json_body,
+                    params=params,
+                    attempt=attempt,
+                    retries=self.retries,
                 )
+
                 resp = requests.request(
                     method=method.upper(),
                     url=url,
@@ -110,11 +108,9 @@ class HttpClient:
                 )
                 LOGGER.debug(
                     "http_response",
-                    extra={
-                        "status": resp.status_code,
-                        "url": url,
-                        "body_excerpt": safe_response_preview(resp),
-                    },
+                    status=resp.status_code,
+                    url=url,
+                    text=safe_response_preview(resp),
                 )
                 if raise_for_status and not self.is_success(resp.status_code):
                     raise ExternalServiceError(
@@ -131,13 +127,10 @@ class HttpClient:
                 should_retry = attempt < self.retries
                 LOGGER.warning(
                     "http_attempt_failed",
-                    extra={
-                        "url": url,
-                        "attempt": attempt,
-                        "will_retry": should_retry,
-                        "error": str(exc),
-                    },
-                    exc_info=True,
+                    url=url,
+                    attempt=attempt,
+                    will_retry=should_retry,
+                    error=str(exc),
                 )
                 if should_retry:
                     delay = _exponential_backoff(
@@ -146,10 +139,7 @@ class HttpClient:
                         cap=self.backoff_cap,
                         jitter=self.jitter,
                     )
-                    LOGGER.info(
-                        "http_retry_scheduled",
-                        extra={"url": url, "next_attempt": attempt + 1, "sleep": round(delay, 3)},
-                    )
+                    LOGGER.info("http_retry_scheduled", url=url, next_attempt=attempt + 1, sleep=round(delay, 3))
                     time.sleep(delay)
 
         if isinstance(last_exc, ExternalServiceError):

@@ -10,15 +10,12 @@ import pandas as pd  # type: ignore[import-untyped]
 
 from gardebot.common.logging_configuration import get_logger
 from gardebot.config import PREVENTION_DAY_BEFORE_HOLIDAY
-from gardebot.integrations.waha_client import WahaClient
-from gardebot.metrics import record_initialize
 from gardebot.services.events import EventService
 from gardebot.services.message_service import MessageService
 from gardebot.services.onduty import OnDutyService
 from gardebot.services.poll_service import PollService
 from gardebot.services.sapeur import SapeurService
 from gardebot.services.votes import VoteService
-from gardebot.settings import settings
 
 LOGGER = get_logger(__name__)
 
@@ -28,20 +25,12 @@ class Gardebot:
 
     def __init__(self) -> None:
         """Initialize Gardebot with adapters and services."""
-        self.waha_client = WahaClient(
-            api_key=settings.api.api_key,
-            base_url=settings.api.base_url,
-            session=settings.api.session,
-            timeout=settings.api.timeout_seconds,
-            retries=settings.api.retry_attempts,
-        )
-
         self.event_service = EventService()
         self.vote_service = VoteService()
         self.onduty_service = OnDutyService()
         self.sapeur_service = SapeurService()
-        self.message_service = MessageService(waha_client=self.waha_client)
-        self.poll_service = PollService(waha_client=self.waha_client)
+        self.message_service = MessageService()
+        self.poll_service = PollService()
 
     def handle_incoming_message(self, data: Dict[str, Any]) -> None:
         """Handle an incoming message event."""
@@ -53,7 +42,7 @@ class Gardebot:
 
     def assign_on_duty_for_events(self) -> None:
         """Assign on-duty personnel for events ready for assignment."""
-        event_list = self.event_service.repo.list_events()
+        event_list = self.event_service.list_events()
         for event in event_list:
             try:
                 if self.vote_service.test_event_completion(event):
@@ -78,15 +67,14 @@ class Gardebot:
         try:
             self.event_service.synchronize_events()
             self.sapeur_service.synchronize_sapeurs()
-            self.vote_service.repo.create(overwrite=False)
-            self.onduty_service.on_duty_repos.create(overwrite=False)
-            record_initialize()
+            self.vote_service.create(overwrite=False)
+            self.onduty_service.create(overwrite=False)
             LOGGER.debug("gardebot_initialize_complete")
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("gardebot_initialize_error", error=str(exc))
 
     def _notify_admin(self, message: str) -> None:
-        self.message_service.messaging.send_text(to_number=os.environ.get("ADMIN_NUMBER", ""), text=message)
+        self.message_service.send_text(to_number=os.environ.get("ADMIN_NUMBER", ""), text=message)
 
     def send_holiday_warning(self) -> None:
         """Send a warning message for upcoming holidays."""
@@ -101,11 +89,11 @@ class Gardebot:
 
     def reminders(self) -> None:
         """Send reminders for all polls that need it."""
-        event_list = self.event_service.repo.list_events()
+        event_list = self.event_service.list_events()
         for event in event_list:
             if event.should_send_reminder() and not self.onduty_service.is_assigned(event):
                 try:
-                    self.message_service.messaging.send_vote_reminder(event=event)
+                    self.message_service.send_vote_reminder(event=event)
                     update_evt = self.event_service.increment_reminder(event)
                     LOGGER.info(
                         "poll_reminder_sent",

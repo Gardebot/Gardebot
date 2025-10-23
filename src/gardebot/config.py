@@ -1,5 +1,9 @@
 """Configuration settings for the Gardebot application."""
 
+import pytz  # type: ignore[import-untyped]
+
+GENEVA_TZ = pytz.timezone("Europe/Zurich")
+
 # GROUP_ID_GARDE_ET_PIQUET = "120363402596282813@g.us" # PROD ID POUR LE GROUPE DES GARDES
 GROUP_ID_GARDE_ET_PIQUET = "120363419490068226@g.us"  # PRIVATE TEST
 # GROUP_ID_GARDE_ET_PIQUET = "120363417540870860@g.us"

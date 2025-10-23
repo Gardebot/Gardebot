@@ -2,41 +2,33 @@
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
+from gardebot.common.logging_configuration import get_logger
 from gardebot.config import GROUP_ID_GARDE_ET_PIQUET
 from gardebot.errors import ExternalServiceError
 from gardebot.integrations.waha_client import WahaClient
-from gardebot.settings import settings
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
-class GroupAdapter:
+class GroupAdapter(WahaClient):
     """Encapsulates group-related WAHA interactions."""
 
     def __init__(
         self,
         group_id: str = GROUP_ID_GARDE_ET_PIQUET,
-        waha_client: Optional[WahaClient] = None,
     ) -> None:
         """Initialize with optional custom WahaClient."""
         self.group_id = group_id
-        self._client = waha_client or WahaClient(
-            api_key=settings.api.api_key,
-            base_url=settings.api.base_url,
-            session=settings.api.session,
-            timeout=settings.api.timeout_seconds,
-            retries=settings.api.retry_attempts,
-        )
+        super().__init__()
 
     def get_group_participants(self) -> List[Dict[str, Any]]:
         """Return list of participants or raise ExternalServiceError."""
-        endpoint = f"/api/{self._client.session}/groups/{self.group_id}/participants"
+        endpoint = f"/api/{self.session}/groups/{self.group_id}/participants"
         try:
-            resp = self._client._http.request("GET", endpoint, raise_for_status=True)  # noqa: SLF001
-            data = self._client._extract_json(resp)  # noqa: SLF001
+            resp = self.get(endpoint, raise_for_status=True)
+            data = self.extract_json(resp)  # noqa: SLF001
             if not isinstance(data, list):
                 raise ExternalServiceError(
                     "Unexpected participants data shape",
@@ -57,7 +49,7 @@ class GroupAdapter:
         sort_order: str = "desc",
     ) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """Fetch groups with pagination."""
-        endpoint = f"/api/{self._client.session}/groups"
+        endpoint = f"/api/{self.session}/groups"
         params = {
             "limit": limit,
             "offset": offset,
@@ -65,12 +57,12 @@ class GroupAdapter:
             "sortOrder": sort_order,
         }
         try:
-            resp = self._client._http.request("GET", endpoint, params=params, raise_for_status=True)  # noqa: SLF001
+            resp = self.get(endpoint, params=params, raise_for_status=True)
             if isinstance(resp.json(), list):
-                data_list: List[Dict[str, Any]] = self._client._extract_json_list(resp)  # noqa: SLF001
+                data_list: List[Dict[str, Any]] = self.extract_json_list(resp)
                 return data_list
             elif isinstance(resp.json(), dict):
-                data_dict: Dict[str, Any] = self._client._extract_json_dict(resp)  # noqa: SLF001
+                data_dict: Dict[str, Any] = self.extract_json_dict(resp)
                 return data_dict
             else:
                 raise ExternalServiceError(

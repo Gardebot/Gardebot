@@ -21,9 +21,9 @@ class MessageService:
     that exposes send_text(to_number: str, message_text: str).
     """
 
-    def __init__(self, waha_client: Any) -> None:
+    def __init__(self) -> None:
         """Sender: object providing send_text(to_number: str, message_text: str) and (optionally later) other message-related operations."""
-        self.messaging = MessagingAdapter(waha_client=waha_client)
+        self.messaging = MessagingAdapter()
 
     def handle_webhook_payload(self, data: Dict[str, Any]) -> None:
         """Public entry point to process an inbound message event."""
@@ -35,7 +35,7 @@ class MessageService:
             body: str = payload.get("body", "")
             from_number: str = payload.get("from")
             timestamp = payload.get("timestamp")
-            LOGGER.info("message_received", sender=from_number, body_excerpt=body[:60])
+            LOGGER.info("message_received", sender=from_number, text=body[:60])
             self._echo(body, from_number, timestamp)
         except ExternalServiceError as exc:
             LOGGER.error("message_processing_error_external", error=str(exc), detail=exc.detail, raw=data)
@@ -74,3 +74,11 @@ class MessageService:
                 results["private"].append({"to": sap.uid, "error": str(exc)})
         LOGGER.info("convocation_complete", poll_string=assignment.event.poll_string, on_duty=[s.name for s in assignment.sapeur_list])
         return results
+
+    def send_text(self, to_number: str, text: str) -> Dict[str, Any]:
+        """Wrapper around send_text from MessagingAdapter."""
+        return self.messaging.send_text(to_number=to_number, text=text)
+
+    def send_vote_reminder(self, event: Any) -> Dict[str, Any]:
+        """Wrapper around send_vote_reminder from MessagingAdapter."""
+        return self.messaging.send_vote_reminder(event=event)

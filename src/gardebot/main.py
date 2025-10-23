@@ -1,8 +1,8 @@
 """Main Description."""
 
-import logging
+from gardebot.common.logging_configuration import get_logger
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 def main() -> None:

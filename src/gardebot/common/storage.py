@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import logging
 import os
 from typing import Iterable
 
@@ -11,7 +10,9 @@ import pandas as pd  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 from dotenv import load_dotenv
 
-LOGGER = logging.getLogger(__name__)
+from gardebot.common.logging_configuration import get_logger
+
+LOGGER = get_logger(__name__)
 
 
 class FileStorage:
