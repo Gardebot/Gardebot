@@ -278,5 +278,5 @@ class OnDutyRepository:
         return df
 
     def list_sapeurs(self) -> List[Sapeur]:
-        """Wrapper arounfd sapeur repository to list all sapeurs."""
+        """Wrapper around sapeur repository to list all sapeurs."""
         return self.sapeur_repository.list_sapeurs()
