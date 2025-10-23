@@ -97,18 +97,30 @@ class PollingAdapter(WahaClient):
         event = self._event_service.find_by_poll_uid(poll_id)
         return event
 
+    def _parse_vote_payload(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse the vote payload into structured components."""
+        event = self._extract_event_from_data(data)
+        sapeur = self._extract_sapeur_from_payload(data)
+        tmp_vote_value = self._extract_vote_value_from_data(data)
+        if tmp_vote_value not in VOTE_OPTIONS and tmp_vote_value is not None:
+            raise ValueError(f"Invalid vote value {tmp_vote_value}")
+        vote_value = VOTE_OPTIONS.get(tmp_vote_value) if tmp_vote_value else None
+        return {
+            "event": event,
+            "sapeur": sapeur,
+            "vote_value": vote_value,
+        }
+
     def process_vote_from_group(self, data: Dict[str, Any]) -> None:
         """Process a vote event from the group; return event if processed."""
         try:
-            event = self._extract_event_from_data(data)
+            clean_payload = self._parse_vote_payload(data)
+            event: Event = clean_payload["event"]
+            sapeur: Sapeur = clean_payload["sapeur"]
+            vote_value: Optional[bool] = clean_payload["vote_value"]
             if self._onduty_service.is_assigned(event=event):
                 LOGGER.info("vote_ignored_event_already_assigned", poll_string=event.poll_string)
                 return
-            sapeur = self._extract_sapeur_from_payload(data)
-            tmp_vote_value = self._extract_vote_value_from_data(data)
-            if tmp_vote_value not in VOTE_OPTIONS and tmp_vote_value is not None:
-                raise ValueError(f"Invalid vote value {tmp_vote_value}")
-            vote_value = VOTE_OPTIONS.get(tmp_vote_value) if tmp_vote_value else None
             vote = VoteRecord(event=event, sapeur=sapeur, value=vote_value)
             self._vote_service.record_vote(vote)
             if self._vote_service.test_event_completion(event):
