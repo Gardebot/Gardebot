@@ -65,10 +65,6 @@ class EventService:
         self.repo.upsert_event(updated)
         return updated
 
-    def events_needing_reminder(self) -> List[Event]:
-        """Return events for which a reminder should be sent."""
-        return [e for e in self.repo.list_events() if e.should_send_reminder()]
-
     def assign_poll_uid(self, evt: Event, poll_uid: str) -> Event:
         """Assign poll_uid to event."""
         updated = evt.with_poll_uid(poll_uid)

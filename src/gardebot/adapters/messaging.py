@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any, Dict, List, Optional
 
 import pytz  # type: ignore[import-untyped]
 
 from gardebot.common.logging_configuration import get_logger
-from gardebot.config import EM_NAME
+from gardebot.config import EM_NAME, GROUP_ID_GARDE_ET_PIQUET
 from gardebot.errors import NotFoundError
 from gardebot.integrations.waha_client import WahaClient
 from gardebot.models.domain import Event, OnDutyAssignment, Sapeur
@@ -105,11 +104,11 @@ class MessagingAdapter:
         if len(sapeur_list) == 0:
             return None
         payload = self._build_mentions_payload(
-            to_number=os.environ.get("ADMIN_NUMBER", ""),
+            to_number=GROUP_ID_GARDE_ET_PIQUET,
             sapeur_list=sapeur_list,
             reply_to=event.poll_uid,
         )
-        payload["text"] = f"Bonjour, merci à {payload['text']} de répondre au sondage - {event.poll_string} - associé :)"
+        payload["text"] = f"Bonjour, merci à {payload['text']} de répondre au sondage *{event.poll_string}* ci-joint :)"
         return payload
 
     def send_vote_reminder(self, event: Event) -> Dict[str, Any]:

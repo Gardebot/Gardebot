@@ -38,19 +38,12 @@ def send_assignments() -> None:
     LOGGER.info("Scheduled on-duty assignments finished.")
 
 
-# def send_polls_reminder() -> None: # TODO: reactivate when needed
-#     """Check all polls for reminders."""
-#     LOGGER.info("Starting scheduled poll reminders...")
-#     gardebot = Gardebot()
-#     on_duty_manager = OndutyManager()
-#     gardebot.event_service.list_events()
-#     gardes_list = gardebot.event_service.list_events()
-#     for poll_string in gardes_list:
-#         if on_duty_manager.test_assigned(poll_string=poll_string):
-#             LOGGER.debug("Le poll %s a déjà été traité.", poll_string)
-#             continue
-#         gardebot.send_reminder(poll_string=poll_string)
-#     LOGGER.info("Scheduled poll reminders finished.")
+def send_reminders() -> None:
+    """Check all polls for reminders."""
+    LOGGER.info("Starting scheduled poll reminders...")
+    gardebot = Gardebot()
+    gardebot.reminders()
+    LOGGER.info("Scheduled poll reminders finished.")
 
 
 def warn_holidays() -> None:
@@ -66,7 +59,7 @@ if __name__ == "__main__":
     scheduler.add_job(sync_events, "cron", hour=2)
     scheduler.add_job(warn_holidays, "cron", hour=12)
     scheduler.add_job(send_assignments, "cron", hour=12)
-    # scheduler.add_job(send_polls_reminder, "cron", hour=10)
+    scheduler.add_job(send_reminders, "cron", hour=10)
     scheduler.add_job(publish_polls, "cron", hour=9)
     try:
         scheduler.start()
