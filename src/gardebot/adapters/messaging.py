@@ -79,7 +79,7 @@ class MessagingAdapter(WahaClient):
         """Generic POST helper returning parsed JSON or raising ExternalServiceError."""
         LOGGER.debug("http_post_json", endpoint=endpoint, payload=payload)
         resp = self.post(endpoint, json_body=payload, raise_for_status=True)
-        return self.extract_json_dict(resp)  # noqa: SLF001
+        return self.extract_json_dict(resp)
 
     def _build_vote_reminder_payload(self, event: Event) -> Optional[Dict[str, Any]]:
         """Build payload for vote reminder message."""
