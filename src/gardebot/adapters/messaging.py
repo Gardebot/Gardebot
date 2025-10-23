@@ -104,7 +104,6 @@ class MessagingAdapter:
         if len(sapeur_list) == 0:
             return None
         payload = self._build_mentions_payload(
-            # to_number=os.environ.get("ADMIN_NUMBER", ""),
             to_number=GROUP_ID_GARDE_ET_PIQUET,
             sapeur_list=sapeur_list,
             reply_to=event.poll_uid,
