@@ -62,7 +62,7 @@ class GroupAdapter(WahaClient):
                 data_list: List[Dict[str, Any]] = self.extract_json_list(resp)
                 return data_list
             elif isinstance(resp.json(), dict):
-                data_dict: Dict[str, Any] = self.extract_json_dict(resp)  # noqa: SLF001
+                data_dict: Dict[str, Any] = self.extract_json_dict(resp)
                 return data_dict
             else:
                 raise ExternalServiceError(
