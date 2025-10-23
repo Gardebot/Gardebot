@@ -65,8 +65,12 @@ class EventService:
         self.repo.upsert_event(updated)
         return updated
 
-    def assign_poll_uid(self, evt: Event, poll_uid: str) -> Event:
+    def assign_poll_uid(self, event: Event, poll_uid: str) -> Event:
         """Assign poll_uid to event."""
-        updated = evt.with_poll_uid(poll_uid)
+        updated = event.with_poll_uid(poll_uid)
         self.repo.upsert_event(updated)
         return updated
+
+    def find_by_poll_uid(self, poll_id: str) -> Event:
+        """Wrapper around find_by_poll_uid from repository."""
+        return self.repo.find_by_poll_uid(poll_id)

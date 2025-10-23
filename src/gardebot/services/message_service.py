@@ -74,3 +74,11 @@ class MessageService:
                 results["private"].append({"to": sap.uid, "error": str(exc)})
         LOGGER.info("convocation_complete", poll_string=assignment.event.poll_string, on_duty=[s.name for s in assignment.sapeur_list])
         return results
+
+    def send_text(self, to_number: str, text: str) -> Dict[str, Any]:
+        """Wrapper around send_text from MessagingAdapter."""
+        return self.messaging.send_text(to_number=to_number, text=text)
+
+    def send_vote_reminder(self, event: Any) -> Dict[str, Any]:
+        """Wrapper around send_vote_reminder from MessagingAdapter."""
+        return self.messaging.send_vote_reminder(event=event)

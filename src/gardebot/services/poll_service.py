@@ -33,7 +33,7 @@ class PollService:
                 retries=settings.api.retry_attempts,
             )
         self.polling = PollingAdapter(waha_client=waha_client)
-        self.messaging = MessageService(waha_client=waha_client)
+        self.message_service = MessageService(waha_client=waha_client)
 
     def handle_webhook_payload(self, data: Dict[str, Any]) -> None:
         """Public entry point to process an inbound poll event."""
@@ -48,7 +48,7 @@ class PollService:
                 self.polling.process_vote_from_admin(data)
             else:
                 LOGGER.info("vote_unknown_chat_id", chat_id=chat_id)
-                self.messaging.messaging.send_text(
+                self.message_service.send_text(
                     to_number=os.environ.get("ADMIN_NUMBER", ""), text=f"Vote received from unknown chat_id: {chat_id}"
                 )
         except NotFoundError as nf:
@@ -58,7 +58,7 @@ class PollService:
 
     def publish_polls(self) -> None:
         """Publish polls for upcoming events."""
-        event_list = self.polling._event_service.repo.list_events()
+        event_list = self.polling.list_events()
         to_be_published = [evt for evt in event_list if self.polling.should_be_published(evt)]
         LOGGER.debug("publishing_polls_start", count=len(to_be_published))
         for evt in to_be_published:
@@ -76,6 +76,6 @@ class PollService:
             poll_uid: Optional[str] = poll_data.get("id")
             if not poll_uid:
                 raise NotFoundError(detail={"resource": "poll.id", "poll_data": poll_data})
-            self.polling._event_service.assign_poll_uid(evt=evt, poll_uid=poll_uid)
-            _ = self.polling._event_service.mark_published(event=evt)
+            self.polling.assign_poll_uid(event=evt, poll_uid=poll_uid)
+            _ = self.polling.mark_published(event=evt)
             LOGGER.info("poll_published", poll_string=evt.poll_string, poll_id=poll_uid)

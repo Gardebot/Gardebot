@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import List
+from typing import List, Optional
+
+import pandas as pd  # type: ignore[import-untyped]
 
 from gardebot.config import EM_NAME, MAX_NB_REMINDER
 from gardebot.models.domain import Event, Sapeur, VoteRecord
@@ -66,3 +68,12 @@ class VoteService:
     def test_event_completion(self, event: Event) -> bool:
         """Test if an event can be processed for assignment."""
         return self.test_headcount_reached(event) or self.test_all_responded(event) or self.test_max_reminders(event)
+
+    def get_vote_df(self, event_list: Optional[List[Event]] = None, sapeur_list: Optional[List[Sapeur]] = None) -> pd.DataFrame:
+        """Wrapper around get vote from repository."""
+        vote_df = self.repo.get_vote_df(event_list=event_list, sapeur_list=sapeur_list)
+        return vote_df
+
+    def create(self, overwrite: bool = False) -> None:
+        """Wrapper around create from repository."""
+        self.repo.create(overwrite=overwrite)

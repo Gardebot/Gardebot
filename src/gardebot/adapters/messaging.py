@@ -9,8 +9,6 @@ from gardebot.config import EM_NAME, GENEVA_TZ, GROUP_ID_GARDE_ET_PIQUET
 from gardebot.errors import NotFoundError
 from gardebot.integrations.waha_client import WahaClient
 from gardebot.models.domain import Event, OnDutyAssignment, Sapeur
-from gardebot.repositories import SapeurRepository
-from gardebot.services.events import EventService
 from gardebot.services.votes import VoteService
 from gardebot.settings import settings
 
@@ -23,9 +21,7 @@ class MessagingAdapter:
     def __init__(
         self,
         waha_client: Optional[WahaClient] = None,
-        event_service: Optional[EventService] = None,
         vote_service: Optional[VoteService] = None,
-        sapeur_repository: Optional[SapeurRepository] = None,
     ) -> None:
         """Initialize with optional shared services and WahaClient."""
         self._client = waha_client or WahaClient(
@@ -35,9 +31,7 @@ class MessagingAdapter:
             timeout=settings.api.timeout_seconds,
             retries=settings.api.retry_attempts,
         )
-        self._event_service = event_service or EventService()
         self._vote_service = vote_service or VoteService()
-        self._sapeur_repo = sapeur_repository or SapeurRepository()
         self.endpoint = "/api/sendText"
 
     def send_text(self, to_number: str, text: str) -> Dict[str, Any]:

@@ -102,7 +102,7 @@ class PollingAdapter:
         poll_id = poll_obj.get("id")
         if not poll_id:
             raise NotFoundError(detail={"resource": "poll.id", "poll": poll_obj})
-        event = self._event_service.repo.find_by_poll_uid(poll_id)
+        event = self._event_service.find_by_poll_uid(poll_id)
         return event
 
     def process_vote_from_group(self, data: Dict[str, Any]) -> None:
@@ -168,3 +168,15 @@ class PollingAdapter:
         data = self._client.extract_json_dict(resp)  # noqa: SLF001
         LOGGER.info("poll_sent", to=to_conv, poll_id=data.get("id"))
         return data
+
+    def list_events(self) -> List[Event]:
+        """Wrapper around event service to list events."""
+        return self._event_service.list_events()
+
+    def assign_poll_uid(self, event: Event, poll_uid: str) -> Event:
+        """Wrapper around event service to assign poll uid."""
+        return self._event_service.assign_poll_uid(event=event, poll_uid=poll_uid)
+
+    def mark_published(self, event: Event) -> Event:
+        """Wrapper around event service to mark event as published."""
+        return self._event_service.mark_published(event=event)
