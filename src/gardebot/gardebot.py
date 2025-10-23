@@ -98,3 +98,23 @@ class Gardebot:
             if timedelta.days == PREVENTION_DAY_BEFORE_HOLIDAY:
                 message = f"Prochain jour férié: {name} le {date.strftime('%A %d %B %Y')}."
                 self._notify_admin(message=message)
+
+    def reminders(self) -> None:
+        """Send reminders for all polls that need it."""
+        event_list = self.event_service.repo.list_events()
+        for event in event_list:
+            if event.should_send_reminder() and not self.onduty_service.is_assigned(event):
+                try:
+                    self.message_service.messaging.send_vote_reminder(event=event)
+                    update_evt = self.event_service.increment_reminder(event)
+                    LOGGER.info(
+                        "poll_reminder_sent",
+                        poll_string=update_evt.poll_string,
+                        nb_reminder=update_evt.nb_reminder,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    LOGGER.error(
+                        "poll_reminder_error",
+                        poll_string=event.poll_string,
+                        error=str(exc),
+                    )

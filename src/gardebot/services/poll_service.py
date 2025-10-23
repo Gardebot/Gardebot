@@ -73,9 +73,9 @@ class PollService:
             except ExternalServiceError as exc:
                 LOGGER.error("poll_publish_failed", poll_string=evt.poll_string, error=str(exc))
                 continue
-            _ = evt.mark_published()
             poll_uid: Optional[str] = poll_data.get("id")
             if not poll_uid:
                 raise NotFoundError(detail={"resource": "poll.id", "poll_data": poll_data})
             self.polling._event_service.assign_poll_uid(evt=evt, poll_uid=poll_uid)
+            _ = self.polling._event_service.mark_published(event=evt)
             LOGGER.info("poll_published", poll_string=evt.poll_string, poll_id=poll_uid)
