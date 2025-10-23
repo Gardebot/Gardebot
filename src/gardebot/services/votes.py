@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 from typing import List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
 
+from gardebot.common.logging_configuration import get_logger
 from gardebot.config import EM_NAME, MAX_NB_REMINDER
 from gardebot.models.domain import Event, Sapeur, VoteRecord
 from gardebot.repositories import VoteRepository
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 class VoteService:

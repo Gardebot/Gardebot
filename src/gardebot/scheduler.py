@@ -1,17 +1,16 @@
 """Scheduler to periodically do stuff."""
 
-import logging
-
 from apscheduler.schedulers.blocking import (  # type: ignore[import-untyped]
     BlockingScheduler,
 )
 
+from gardebot.common.logging_configuration import configure_logging, get_logger
 from gardebot.gardebot import Gardebot
 from gardebot.services.events import EventService
 from gardebot.services.poll_service import PollService
 
-logging.basicConfig(level=logging.INFO)
-LOGGER = logging.getLogger(__name__)
+configure_logging()
+LOGGER = get_logger(__name__)
 
 
 def sync_events() -> None:

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, List, Union
 
+from gardebot.common.logging_configuration import get_logger
 from gardebot.config import GROUP_ID_GARDE_ET_PIQUET
 from gardebot.errors import ExternalServiceError
 from gardebot.integrations.waha_client import WahaClient
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 class GroupAdapter(WahaClient):

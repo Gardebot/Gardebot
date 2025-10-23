@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import logging
 from typing import List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
 
+from gardebot.common.logging_configuration import get_logger
 from gardebot.config import EM_NAME
 from gardebot.errors import AlreadyAssignedError
 from gardebot.models.domain import Event, OnDutyAssignment, Sapeur
 from gardebot.repositories import OnDutyRepository
 from gardebot.services.votes import VoteService
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 class OnDutyService:

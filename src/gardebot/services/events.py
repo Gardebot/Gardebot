@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 from typing import List, Optional
 
+from gardebot.common.logging_configuration import get_logger
 from gardebot.integrations.infomaniak import InfomaniakCalendar
 from gardebot.models.domain import Event
 from gardebot.repositories import EventRepository
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 class EventService:

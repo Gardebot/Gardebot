@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, List
 
 import pandas as pd  # type: ignore[import-untyped]
 
 from gardebot.adapters.contacts import ContactAdapter
 from gardebot.adapters.groups import GroupAdapter
+from gardebot.common.logging_configuration import get_logger
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 class GroupService:

@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, List, Optional, Union
 
 import requests  # type: ignore[import-untyped]
 
+from gardebot.common.logging_configuration import get_logger
 from gardebot.errors import ExternalServiceError
 from gardebot.http.http_client import HttpClient
 from gardebot.settings import settings
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 class WahaClient:

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, Optional
 
+from gardebot.common.logging_configuration import get_logger
 from gardebot.errors import ExternalServiceError
 from gardebot.integrations.waha_client import WahaClient
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger(__name__)
 
 
 class ContactAdapter(WahaClient):
