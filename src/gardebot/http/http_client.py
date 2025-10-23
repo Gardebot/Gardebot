@@ -110,7 +110,7 @@ class HttpClient:
                     "http_response",
                     status=resp.status_code,
                     url=url,
-                    body_excerpt=safe_response_preview(resp),
+                    text=safe_response_preview(resp),
                 )
                 if raise_for_status and not self.is_success(resp.status_code):
                     raise ExternalServiceError(

@@ -15,30 +15,22 @@ from gardebot.repositories import SapeurRepository
 from gardebot.services.events import EventService
 from gardebot.services.onduty import OnDutyService
 from gardebot.services.votes import VoteService
-from gardebot.settings import settings
 
 LOGGER = get_logger(__name__)
 
 
-class PollingAdapter:
+class PollingAdapter(WahaClient):
     """PollingAdapter: poll operations via WahaClient with shared services injection."""
 
     def __init__(
         self,
-        waha_client: Optional[WahaClient] = None,
         event_service: Optional[EventService] = None,
         vote_service: Optional[VoteService] = None,
         onduty_service: Optional[OnDutyService] = None,
         sapeur_repository: Optional[SapeurRepository] = None,
     ) -> None:
         """Initialize with optional shared services and WahaClient."""
-        self._client = waha_client or WahaClient(
-            api_key=settings.api.api_key,
-            base_url=settings.api.base_url,
-            session=settings.api.session,
-            timeout=settings.api.timeout_seconds,
-            retries=settings.api.retry_attempts,
-        )
+        super().__init__()
         self._event_service = event_service or EventService()
         self._vote_service = vote_service or VoteService()
         self._onduty_service = onduty_service or OnDutyService()
@@ -161,11 +153,11 @@ class PollingAdapter:
                 "options": poll_options,
                 "multipleAnswers": multiple_answers,
             },
-            "session": self._client.session,
+            "session": self.session,
         }
         LOGGER.debug("sending_poll", to=to_conv, title=poll_title)
-        resp = self._client.post("/api/sendPoll", json_body=payload, raise_for_status=True)
-        data = self._client.extract_json_dict(resp)  # noqa: SLF001
+        resp = self.post("/api/sendPoll", json_body=payload, raise_for_status=True)
+        data = self.extract_json_dict(resp)  # noqa: SLF001
         LOGGER.info("poll_sent", to=to_conv, poll_id=data.get("id"))
         return data
 
