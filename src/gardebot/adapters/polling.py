@@ -5,10 +5,9 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
-import pytz  # type: ignore[import-untyped]
 
 from gardebot.common.logging_configuration import get_logger
-from gardebot.config import VOTE_OPTIONS
+from gardebot.config import GENEVA_TZ, VOTE_OPTIONS
 from gardebot.errors import NotFoundError
 from gardebot.integrations.waha_client import WahaClient
 from gardebot.models.domain import Event, Sapeur, VoteRecord
@@ -19,8 +18,6 @@ from gardebot.services.votes import VoteService
 from gardebot.settings import settings
 
 LOGGER = get_logger(__name__)
-
-geneva_tz = pytz.timezone("Europe/Zurich")
 
 
 class PollingAdapter:
@@ -139,7 +136,7 @@ class PollingAdapter:
         if event.is_published():
             LOGGER.debug("event_already_published", poll_string=event.poll_string)
             return False
-        today = pd.Timestamp.now(tz=geneva_tz).date()
+        today = pd.Timestamp.now(tz=GENEVA_TZ).date()
         if event.scheduled_publication_date.date() > today:
             LOGGER.debug("event_not_due_yet", poll_string=event.poll_string)
             return False
@@ -167,7 +164,7 @@ class PollingAdapter:
             "session": self._client.session,
         }
         LOGGER.debug("sending_poll", to=to_conv, title=poll_title)
-        resp = self._client._http.request("POST", "/api/sendPoll", json_body=payload, raise_for_status=True)  # noqa: SLF001
-        data = self._client._extract_json_dict(resp)  # noqa: SLF001
+        resp = self._client.post("/api/sendPoll", json_body=payload, raise_for_status=True)
+        data = self._client.extract_json_dict(resp)  # noqa: SLF001
         LOGGER.info("poll_sent", to=to_conv, poll_id=data.get("id"))
         return data

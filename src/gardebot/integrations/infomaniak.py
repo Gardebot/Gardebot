@@ -4,16 +4,15 @@ import os
 from typing import Any, Dict, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
-import pytz  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 from dotenv import load_dotenv
 from icalendar import Calendar  # type: ignore[import-untyped]
 from icalendar.cal import Component  # type: ignore[import-untyped]
 
 from gardebot.common.logging_configuration import get_logger
+from gardebot.config import GENEVA_TZ
 
 LOGGER = get_logger(__name__)
-geneva_tz = pytz.timezone("Europe/Zurich")
 
 
 class InfomaniakCalendar:
@@ -52,7 +51,7 @@ class InfomaniakCalendar:
 
     def _get_date_from_event(self, event: Component, key: str) -> Optional[pd.Timestamp]:
         """Extracts the date from an event."""
-        date = pd.to_datetime(event.get(key).dt, errors="coerce").tz_convert(geneva_tz).tz_localize(None)
+        date = pd.to_datetime(event.get(key).dt, errors="coerce").tz_convert(GENEVA_TZ).tz_localize(None)
         if pd.isnull(date):
             LOGGER.error("invalid_date_field", summary=event.get("summary"), field=key)
             return None
@@ -81,8 +80,8 @@ class InfomaniakCalendar:
         events_data = []
         for component in cal.walk():
             if component.name == "VEVENT":
-                start_date = pd.to_datetime(component.get("dtstart").dt, errors="coerce").tz_convert(geneva_tz)
-                if start_date > pd.Timestamp.now(tz=geneva_tz):
+                start_date = pd.to_datetime(component.get("dtstart").dt, errors="coerce").tz_convert(GENEVA_TZ)
+                if start_date > pd.Timestamp.now(tz=GENEVA_TZ):
                     clean_event = self.clean_event(component)
                     if clean_event is None or None in clean_event.values():
                         LOGGER.warning("event_skipped_missing_values", summary=component.get("summary"))

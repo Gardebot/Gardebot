@@ -6,18 +6,12 @@ import hashlib
 from typing import List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
-import pytz  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from gardebot.common.common import _format_french_date
 from gardebot.common.logging_configuration import get_logger
-from gardebot.config import (
-    MAX_NB_REMINDER,
-    MINIMUM_ELAPSED_HOURS,
-    TIME_BEFORE_PUBLICATION_DAY,
-)
+from gardebot.config import GENEVA_TZ, MAX_NB_REMINDER, MINIMUM_ELAPSED_HOURS, TIME_BEFORE_PUBLICATION_DAY
 
-geneva_tz = pytz.timezone("Europe/Zurich")
 LOGGER = get_logger(__name__)
 
 
@@ -100,9 +94,9 @@ class Event(BaseModel):
             return False
         ref = self.published_date
         if ref.tzinfo is None:
-            ref = ref.tz_localize(geneva_tz)
+            ref = ref.tz_localize(GENEVA_TZ)
         limit_elapsed = MINIMUM_ELAPSED_HOURS * (self.nb_reminder + 1)
-        should_remind: bool = (pd.Timestamp.now(tz=geneva_tz) - ref) >= pd.Timedelta(hours=limit_elapsed)
+        should_remind: bool = (pd.Timestamp.now(tz=GENEVA_TZ) - ref) >= pd.Timedelta(hours=limit_elapsed)
         return should_remind
 
     def increment_reminder(self) -> Event:
@@ -111,7 +105,7 @@ class Event(BaseModel):
 
     def mark_published(self, when: Optional[pd.Timestamp] = None) -> Event:
         """Return a new Event with published_date set."""
-        when_ts = when or pd.Timestamp.now(tz=geneva_tz)
+        when_ts = when or pd.Timestamp.now(tz=GENEVA_TZ)
         return self.model_copy(update={"published_date": when_ts})
 
     def is_published(self) -> bool:

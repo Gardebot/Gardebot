@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-import pytz  # type: ignore[import-untyped]
-
 from gardebot.common.logging_configuration import get_logger
-from gardebot.config import EM_NAME, GROUP_ID_GARDE_ET_PIQUET
+from gardebot.config import EM_NAME, GENEVA_TZ, GROUP_ID_GARDE_ET_PIQUET
 from gardebot.errors import NotFoundError
 from gardebot.integrations.waha_client import WahaClient
 from gardebot.models.domain import Event, OnDutyAssignment, Sapeur
@@ -17,7 +15,6 @@ from gardebot.services.votes import VoteService
 from gardebot.settings import settings
 
 LOGGER = get_logger(__name__)
-GENEVA_TZ = pytz.timezone("Europe/Zurich")
 
 
 class MessagingAdapter:
@@ -70,8 +67,8 @@ class MessagingAdapter:
     def get_message(self, chat_id: str, message_id: str) -> Dict[str, Any]:
         """Fetch a message by ID."""
         endpoint = f"/api/{self._client.session}/chats/{chat_id}/messages/{message_id}"
-        resp = self._client._http.request("GET", endpoint, raise_for_status=True)
-        return self._client._extract_json_dict(resp)
+        resp = self._client.get(endpoint, raise_for_status=True)
+        return self._client.extract_json_dict(resp)
 
     def _build_mentions_payload(
         self,
@@ -95,8 +92,8 @@ class MessagingAdapter:
     def _post_json(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Generic POST helper returning parsed JSON or raising ExternalServiceError."""
         LOGGER.debug("http_post_json", endpoint=endpoint, payload=payload)
-        resp = self._client._http.request("POST", endpoint, json_body=payload, raise_for_status=True)  # noqa: SLF001
-        return self._client._extract_json_dict(resp)  # noqa: SLF001
+        resp = self._client.post(endpoint, json_body=payload, raise_for_status=True)
+        return self._client.extract_json_dict(resp)  # noqa: SLF001
 
     def _build_vote_reminder_payload(self, event: Event) -> Optional[Dict[str, Any]]:
         """Build payload for vote reminder message."""

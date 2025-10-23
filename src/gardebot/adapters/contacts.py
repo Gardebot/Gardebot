@@ -36,7 +36,7 @@ class ContactAdapter:
         """
         endpoint = f"/api/contacts?contactId={contact_id}&session={self._client.session}"
         try:
-            response = self._client._http.request("GET", endpoint, raise_for_status=True)  # noqa: SLF001
+            response = self._client.get(endpoint, raise_for_status=True)
             LOGGER.debug("Contact info fetched successfully for contact %s", contact_id)
             contact_info: Dict[str, Any] = response.json()
             contact_info["phone"] = "+" + "".join([a for a in contact_id if a.isdigit()])  # Quick fix to add phone number

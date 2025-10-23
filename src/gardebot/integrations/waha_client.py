@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
+
+import requests  # type: ignore[import-untyped]
 
 from gardebot.errors import ExternalServiceError
 from gardebot.http.http_client import HttpClient
@@ -35,12 +37,12 @@ class WahaClient:
             retries=retries,
         )
 
-    def _extract_json(self, resp: Any) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+    def extract_json(self, resp: Any) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Extract JSON from response or raise ExternalServiceError."""
         if isinstance(resp.json(), dict):
-            return self._extract_json_dict(resp)
+            return self.extract_json_dict(resp)
         elif isinstance(resp.json(), list):
-            return self._extract_json_list(resp)
+            return self.extract_json_list(resp)
         else:
             raise ExternalServiceError(
                 "Unexpected JSON response type",
@@ -48,7 +50,7 @@ class WahaClient:
             )
 
     @staticmethod
-    def _extract_json_dict(resp: Any) -> Dict[str, Any]:
+    def extract_json_dict(resp: Any) -> Dict[str, Any]:
         """Extract JSON from response or raise ExternalServiceError."""
         try:
             return dict(resp.json())
@@ -56,7 +58,7 @@ class WahaClient:
             raise ExternalServiceError("Invalid JSON response", detail={"text": resp.text}) from exc
 
     @staticmethod
-    def _extract_json_list(resp: Any) -> List[Dict[str, Any]]:
+    def extract_json_list(resp: Any) -> List[Dict[str, Any]]:
         """Extract JSON list from response or raise ExternalServiceError."""
         try:
             data = resp.json()
@@ -76,3 +78,35 @@ class WahaClient:
                 error_message,
                 detail={"status": resp.status_code, "body": resp.text},
             )
+
+    def get(
+        self,
+        endpoint: str,
+        json_body: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+        raise_for_status: bool = False,
+    ) -> requests.Response:
+        """Make a GET request to the WAHA API."""
+        return self._http.request(
+            method="GET",
+            endpoint=endpoint,
+            json_body=json_body,
+            params=params,
+            raise_for_status=raise_for_status,
+        )
+
+    def post(
+        self,
+        endpoint: str,
+        json_body: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+        raise_for_status: bool = False,
+    ) -> requests.Response:
+        """Make a POST request to the WAHA API."""
+        return self._http.request(
+            method="POST",
+            endpoint=endpoint,
+            json_body=json_body,
+            params=params,
+            raise_for_status=raise_for_status,
+        )

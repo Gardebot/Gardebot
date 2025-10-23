@@ -35,8 +35,8 @@ class GroupAdapter:
         """Return list of participants or raise ExternalServiceError."""
         endpoint = f"/api/{self._client.session}/groups/{self.group_id}/participants"
         try:
-            resp = self._client._http.request("GET", endpoint, raise_for_status=True)  # noqa: SLF001
-            data = self._client._extract_json(resp)  # noqa: SLF001
+            resp = self._client.get(endpoint, raise_for_status=True)
+            data = self._client.extract_json(resp)  # noqa: SLF001
             if not isinstance(data, list):
                 raise ExternalServiceError(
                     "Unexpected participants data shape",
@@ -65,12 +65,12 @@ class GroupAdapter:
             "sortOrder": sort_order,
         }
         try:
-            resp = self._client._http.request("GET", endpoint, params=params, raise_for_status=True)  # noqa: SLF001
+            resp = self._client.get(endpoint, params=params, raise_for_status=True)
             if isinstance(resp.json(), list):
-                data_list: List[Dict[str, Any]] = self._client._extract_json_list(resp)  # noqa: SLF001
+                data_list: List[Dict[str, Any]] = self._client.extract_json_list(resp)  # noqa: SLF001
                 return data_list
             elif isinstance(resp.json(), dict):
-                data_dict: Dict[str, Any] = self._client._extract_json_dict(resp)  # noqa: SLF001
+                data_dict: Dict[str, Any] = self._client.extract_json_dict(resp)  # noqa: SLF001
                 return data_dict
             else:
                 raise ExternalServiceError(
