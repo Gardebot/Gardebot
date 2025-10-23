@@ -59,7 +59,7 @@ class GroupAdapter(WahaClient):
         try:
             resp = self.get(endpoint, params=params, raise_for_status=True)
             if isinstance(resp.json(), list):
-                data_list: List[Dict[str, Any]] = self.extract_json_list(resp)  # noqa: SLF001
+                data_list: List[Dict[str, Any]] = self.extract_json_list(resp)
                 return data_list
             elif isinstance(resp.json(), dict):
                 data_dict: Dict[str, Any] = self.extract_json_dict(resp)  # noqa: SLF001
