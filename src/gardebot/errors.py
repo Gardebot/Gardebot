@@ -10,7 +10,7 @@ class GardebotError(Exception):
     http_status = 500
     safe_message = "Internal error."
 
-    def __init__(self, message: Optional[str] = None, detail: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: Optional[str] = None, detail: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the error with an optional message and detail."""
         super().__init__(message or self.safe_message)
         self.detail = detail or {}

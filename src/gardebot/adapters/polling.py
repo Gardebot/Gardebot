@@ -181,6 +181,10 @@ class PollingAdapter(WahaClient):
         """Wrapper around event service to assign poll uid."""
         return self._event_service.assign_poll_uid(event=event, poll_uid=poll_uid)
 
-    def mark_published(self, event: Event) -> Event:
+    def assign_poll_published_date(self, event: Event) -> Event:
+        """Wrapper around event service to assign poll published date."""
+        return self._event_service.assign_poll_published_date(event=event)
+
+    def mark_published(self, event: Event, poll_uid: str) -> Event:
         """Wrapper around event service to mark event as published."""
-        return self._event_service.mark_published(event=event)
+        return self._event_service.mark_published(event=event, poll_uid=poll_uid)
