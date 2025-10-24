@@ -19,6 +19,7 @@ class ServerSettings(BaseModel):
 class ApiSettings(BaseModel):
     """Settings related to the WAHA API configuration."""
 
+    # base_url: str = Field(default="http://localhost:3000", env="WAHA_BASE_URL")  # type: ignore
     base_url: str = Field(default="http://waha:3000", env="WAHA_BASE_URL")  # type: ignore
     session: str = Field(default="default", env="WAHA_SESSION")  # type: ignore
     timeout_seconds: int = Field(default=10, env="WAHA_TIMEOUT_SECONDS")  # type: ignore

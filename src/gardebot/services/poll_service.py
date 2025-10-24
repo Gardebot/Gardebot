@@ -66,6 +66,5 @@ class PollService:
             poll_uid: Optional[str] = poll_data.get("id")
             if not poll_uid:
                 raise NotFoundError(detail={"resource": "poll.id", "poll_data": poll_data})
-            self.polling.assign_poll_uid(event=evt, poll_uid=poll_uid)
-            _ = self.polling.mark_published(event=evt)
+            _ = self.polling.mark_published(event=evt, poll_uid=poll_uid)
             LOGGER.info("poll_published", poll_string=evt.poll_string, poll_id=poll_uid)

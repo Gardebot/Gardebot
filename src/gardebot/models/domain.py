@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import pandas as pd  # type: ignore[import-untyped]
+from pandas._libs.tslibs.nattype import NaTType  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from gardebot.common.common import _format_french_date
@@ -45,7 +46,7 @@ class Event(BaseModel):
     end_date: pd.Timestamp
     headcount: int
     poll_uid: Optional[str] = None
-    published_date: Optional[pd.Timestamp] = None
+    published_date: Optional[Union[pd.Timestamp, NaTType]] = None
     scheduled_publication_date: pd.Timestamp = pd.Timestamp(0)
     nb_reminder: int = 0
 
@@ -103,14 +104,18 @@ class Event(BaseModel):
         """Return a new Event model with incremented reminder count."""
         return self.model_copy(update={"nb_reminder": self.nb_reminder + 1})
 
-    def mark_published(self, when: Optional[pd.Timestamp] = None) -> Event:
+    def set_published_date(self, when: Optional[pd.Timestamp] = None) -> Event:
         """Return a new Event with published_date set."""
         when_ts = when or pd.Timestamp.now(tz=GENEVA_TZ)
         return self.model_copy(update={"published_date": when_ts})
 
     def is_published(self) -> bool:
         """Check if the event has been published."""
-        return self.published_date is not None
+        if self.published_date is None:
+            return False
+        if self.poll_uid is None:
+            return False
+        return True
 
     def with_poll_uid(self, poll_uid: str) -> "Event":
         """Return a new Event with poll_uid set (idempotent / protective)."""
