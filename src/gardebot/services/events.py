@@ -53,9 +53,9 @@ class EventService:
         """Return all events."""
         return self.repo.list_events()
 
-    def mark_published(self, event: Event) -> Event:
+    def assign_poll_published_date(self, event: Event) -> Event:
         """Set published date for event."""
-        updated = event.mark_published()
+        updated = event.set_published_date()
         self.repo.upsert_event(updated)
         return updated
 
@@ -74,3 +74,8 @@ class EventService:
     def find_by_poll_uid(self, poll_id: str) -> Event:
         """Wrapper around find_by_poll_uid from repository."""
         return self.repo.find_by_poll_uid(poll_id)
+
+    def mark_published(self, event: Event, poll_uid: str) -> Event:
+        """Mark event as published."""
+        tmp_event = self.assign_poll_published_date(event)
+        return self.assign_poll_uid(tmp_event, poll_uid=poll_uid)
