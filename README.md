@@ -108,52 +108,44 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Synced
-    Synced --> WaitingToPublish
-    WaitingToPublish --> WaitingToPublish
-    WaitingToPublish --> Published
-    Published --> CollectingVotes
-    CollectingVotes --> CollectingVotes
-    CollectingVotes --> SendReminder
-    CollectingVotes --> Satisfied
-    SendReminder --> CollectingVotes
-    Satisfied --> Assigned
-    Assigned --> [*]
+    [*] --> NotReady: Cron 02h00 syncs event
+    NotReady --> NotReady: Publication date not reached yet
+    NotReady --> ReadyToPublish: Publication date reached
+    ReadyToPublish --> Published: Cron 09h00 creates poll
+    Published --> VotingInProgress: Poll sent to group
+    VotingInProgress --> VotingInProgress: Vote received but not enough
+    VotingInProgress --> EnoughVotes: Present votes meet headcount
+    VotingInProgress --> NeedReminder: Cron 10h00 and conditions met
+    NeedReminder --> VotingInProgress: Reminder sent
+    EnoughVotes --> Completed: Cron 12h00 creates assignment
+    Completed --> [*]: Convocation sent
 ```
 
-**Complete Process:**
+**Process Steps:**
 
-| Step | When | What Happens | Result |
-|------|------|--------------|--------|
-| **1. Synced** | Daily 02h00 | Download ICS calendar → Parse events → Save to `events.parquet` | Events in database |
-| **2. WaitingToPublish** | Continuous | Event waits until `start_date - 21 days` | Ready when date reached |
-| **3. Published** | Daily 09h00 | Create WhatsApp poll → Save `poll_uid` and `published_date` | Poll visible in group |
-| **4. CollectingVotes** | Real-time webhooks | Receive vote → Update `votes.parquet` → Count present votes | Vote matrix updated |
-| **5. SendReminder** | Daily 10h00 | If 23h/46h/69h elapsed → Send message with @mentions → Increment counter | Back to collecting |
-| **6. Satisfied** | When votes meet | `present_votes >= headcount` → Wait for assignment cron | Ready to assign |
-| **7. Assigned** | Daily 12h00 | Create assignment → Update `on_duty.parquet` → Send convocation | Done |
+| State | What's Happening | Exits To |
+|-------|------------------|----------|
+| **NotReady** | Event synced from calendar, waiting for publication date (21 days before event) | → NotReady (still waiting) OR → ReadyToPublish (date reached) |
+| **ReadyToPublish** | Publication date reached, waiting for 09h00 cron | → Published |
+| **Published** | Poll created in WhatsApp, poll_uid and published_date saved | → VotingInProgress |
+| **VotingInProgress** | Collecting votes via webhooks | → VotingInProgress (more votes) OR → EnoughVotes (satisfied) OR → NeedReminder (10h00 cron) |
+| **NeedReminder** | Sending reminder with @mentions | → VotingInProgress |
+| **EnoughVotes** | Headcount satisfied, waiting for 12h00 cron | → Completed |
+| **Completed** | Assignment created, convocation sent | → [*] (done) |
 
-**Simple Example:**
-
-Event "Garde" starts **2025-01-15 08h00**, needs **3 people**
-
+**Example:**
 ```
-Dec 25 02h00 → Calendar sync adds event
-Dec 25 09h00 → Poll created (21 days before Jan 15)
-Dec 25 10h00 → Alice votes Présent (1/3)
-Dec 25 14h00 → Bob votes Présent (2/3)
-Dec 26 10h00 → Reminder sent (no response after 23h)
-Dec 26 16h00 → Claire votes Présent (3/3) ← SATISFIED
-Dec 27 12h00 → Assignment created, convocation sent ← DONE
+Event: Garde 15-Jan-2025 08h00, needs 3 people
+
+25-Dec 02h00 → NotReady (synced from calendar)
+25-Dec 09h00 → Published (poll created - 21 days before event)
+25-Dec 10h00 → VotingInProgress (Alice votes, 1/3)
+25-Dec 14h00 → VotingInProgress (Bob votes, 2/3)
+26-Dec 10h00 → NeedReminder → VotingInProgress (reminder sent)
+26-Dec 16h00 → EnoughVotes (Claire votes, 3/3)
+27-Dec 12h00 → Completed (assignment created)
 ```
 
-**Decision Logic:**
-
-- **Publish?** → If `now >= start_date - 21 days` AND no `poll_uid` yet
-- **Remind?** → If `23h × (nb_reminder + 1)` elapsed AND `nb_reminder < 3`
-- **Satisfied?** → If `count(Présent votes) >= headcount`
-- **Assign?** → If satisfied AND not already assigned
-  
 ### 2. Participant Synchronization with Debouncing
 
 ```mermaid
