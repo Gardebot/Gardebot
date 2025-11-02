@@ -107,62 +107,49 @@ sequenceDiagram
 
 ### 1. Event Lifecycle: Calendar to Assignment
 
-**State Transitions:**
-
 ```mermaid
 stateDiagram-v2
-    [*] --> Synced
-    Synced --> ReadyToPublish: publication date reached
-    ReadyToPublish --> Published: cron 09h00
-    Published --> CollectingVotes: poll sent
-    CollectingVotes --> CollectingVotes: vote received
-    CollectingVotes --> NeedsReminder: cron 10h00 check
-    CollectingVotes --> Satisfied: headcount met
-    NeedsReminder --> CollectingVotes: reminder sent
-    Satisfied --> Assigned: cron 12h00
+    [*] --> Synced: Daily 02h00
+    Synced --> WaitingToPublish: Event stored
+    WaitingToPublish --> Published: Daily 09h00 (if ready)
+    Published --> VotesCollected: Votes coming in
+    VotesCollected --> VotesCollected: More votes
+    VotesCollected --> Assigned: Daily 12h00 (if satisfied)
     Assigned --> [*]
-    
-    note right of Synced
-        Cron 02h00 daily
-        Fetch & parse ICS
-        Filter future events
-        Bulk upsert
-    end note
-    
-    note right of Published
-        Poll created via WAHA
-        poll_uid stored
-        published_date set
-    end note
-    
-    note right of Satisfied
-        present_votes >= headcount
-        Ready for assignment
-    end note
 ```
 
-**Process Detail:**
+**How it works:**
 
-| Phase | Trigger | Actions | Data Changes |
-|-------|---------|---------|--------------|
-| **Sync** | Cron: 02:00 daily | 1. Fetch ICS from `CALENDAR_URL`<br/>2. Parse iCalendar events<br/>3. Filter: `start_date >= now()`<br/>4. Drop rows with NA values<br/>5. Suffix duplicate titles (e.g., "Garde", "Garde_1", "Garde_2")<br/>6. Bulk upsert to `events.parquet` | New events appended |
-| **Ready to Publish** | `scheduled_publication_date <= now` | Event qualifies for poll creation | State flag change |
-| **Publication** | Cron: 09:00 daily | 1. Query events where `scheduled_publication_date <= now` AND `is_assigned() == False`<br/>2. Create WhatsApp poll via WAHA API<br/>3. Store returned `poll_uid` in event record<br/>4. Set `published_date` to current timestamp | `event.poll_uid` set<br/>`event.published_date` set |
-| **Vote Collection** | Webhook: `poll.vote` | 1. Extract voter ID from payload<br/>2. Resolve voter to Sapeur<br/>3. Parse vote option (Présent/Absent)<br/>4. Update `votes.parquet` matrix cell<br/>5. Check satisfaction: `present_count >= event.headcount` | Vote matrix cell updated |
-| **Reminder** | Cron: 10:00 daily | 1. Check `event.should_send_reminder()` logic:<br/>&nbsp;&nbsp;- `published_date` is set<br/>&nbsp;&nbsp;- `nb_reminder < MAX_NB_REMINDER (3)`<br/>&nbsp;&nbsp;- Elapsed time >= `MINIMUM_ELAPSED_HOURS (23) * (nb_reminder + 1)`<br/>2. Send WhatsApp message with @mentions<br/>3. Increment `event.nb_reminder` | Reminder counter incremented |
-| **Assignment** | Cron: 12:00 daily | 1. Iterate all events<br/>2. If `vote_service.test_event_completion(event)` AND NOT `is_assigned()`<br/>3. Create assignment with present sapeurs<br/>4. Send formatted convocation message | `on_duty.parquet` updated |
+1. **Synced (02h00)**: Fetch calendar from Infomaniak → Save events to `events.parquet`
 
-**Key Decision Points:**
+2. **WaitingToPublish**: Event waits until 21 days before start date
 
-- **Can publish?** `scheduled_publication_date <= now` AND `poll_uid is None` AND NOT `is_assigned()`
-- **Is satisfied?** `present_vote_count >= event.headcount`
-- **Should remind?** `published_date is set` AND `nb_reminder < 3` AND `elapsed_hours >= 23 * (nb_reminder + 1)`
+3. **Published (09h00)**: Create WhatsApp poll → Store `poll_uid`
 
-**Reminder Timing Example:**
-- 1st reminder: 23 hours after publication (`nb_reminder = 0`, wait = 23h)
-- 2nd reminder: 46 hours after publication (`nb_reminder = 1`, wait = 46h)
-- 3rd reminder: 69 hours after publication (`nb_reminder = 2`, wait = 69h)
-- Max 3 reminders total
+4. **VotesCollected**: 
+   - Each vote updates `votes.parquet`
+   - Reminders sent at 10h00 if needed (23h intervals, max 3 times)
+   - Stays here until `present_votes >= headcount`
+
+5. **Assigned (12h00)**: Create assignment → Update `on_duty.parquet` → Send convocation
+
+**Example:**
+```
+Event: "Garde 15 janvier" (starts 2025-01-15 08h00, needs 3 people)
+
+2024-12-25 02h00 → Event synced from calendar
+2024-12-25 09h00 → Poll published to WhatsApp
+2024-12-25 10h00 → Alice votes "Présent" (1/3)
+2024-12-25 15h00 → Bob votes "Présent" (2/3)
+2024-12-26 10h00 → Reminder sent (23h elapsed)
+2024-12-26 14h00 → Claire votes "Présent" (3/3) ✓ Satisfied
+2024-12-26 12h00 → Assignment created, convocation sent
+```
+
+**Key Rules:**
+- Poll published 21 days before event
+- Reminders every 23 hours (max 3)
+- Assignment when `votes >= headcount`
 
 ### 2. Participant Synchronization with Debouncing
 
