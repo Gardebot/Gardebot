@@ -104,53 +104,56 @@ sequenceDiagram
 ---
 
 ## Process Flows
-
 ### 1. Event Lifecycle: Calendar to Assignment
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Synced: Daily 02h00
-    Synced --> WaitingToPublish: Event stored
-    WaitingToPublish --> Published: Daily 09h00 (if ready)
-    Published --> VotesCollected: Votes coming in
-    VotesCollected --> VotesCollected: More votes
-    VotesCollected --> Assigned: Daily 12h00 (if satisfied)
-    Assigned --> [*]
+    [*] --> Synced: Cron 02h00 daily
+    Synced --> WaitingToPublish: Event in system
+    WaitingToPublish --> WaitingToPublish: Date not reached
+    WaitingToPublish --> Published: Cron 09h00 when ready
+    Published --> CollectingVotes: Poll active
+    CollectingVotes --> CollectingVotes: New vote received
+    CollectingVotes --> SendReminder: Cron 10h00 if needed
+    SendReminder --> CollectingVotes: Reminder sent
+    CollectingVotes --> Satisfied: Enough votes
+    Satisfied --> Assigned: Cron 12h00
+    Assigned --> [*]: Complete
 ```
 
-**How it works:**
+**Complete Process:**
 
-1. **Synced (02h00)**: Fetch calendar from Infomaniak → Save events to `events.parquet`
+| Step | When | What Happens | Result |
+|------|------|--------------|--------|
+| **1. Synced** | Daily 02h00 | Download ICS calendar → Parse events → Save to `events.parquet` | Events in database |
+| **2. WaitingToPublish** | Continuous | Event waits until `start_date - 21 days` | Ready when date reached |
+| **3. Published** | Daily 09h00 | Create WhatsApp poll → Save `poll_uid` and `published_date` | Poll visible in group |
+| **4. CollectingVotes** | Real-time webhooks | Receive vote → Update `votes.parquet` → Count present votes | Vote matrix updated |
+| **5. SendReminder** | Daily 10h00 | If 23h/46h/69h elapsed → Send message with @mentions → Increment counter | Back to collecting |
+| **6. Satisfied** | When votes meet | `present_votes >= headcount` → Wait for assignment cron | Ready to assign |
+| **7. Assigned** | Daily 12h00 | Create assignment → Update `on_duty.parquet` → Send convocation | Done |
 
-2. **WaitingToPublish**: Event waits until 21 days before start date
+**Simple Example:**
 
-3. **Published (09h00)**: Create WhatsApp poll → Store `poll_uid`
+Event "Garde" starts **2025-01-15 08h00**, needs **3 people**
 
-4. **VotesCollected**: 
-   - Each vote updates `votes.parquet`
-   - Reminders sent at 10h00 if needed (23h intervals, max 3 times)
-   - Stays here until `present_votes >= headcount`
-
-5. **Assigned (12h00)**: Create assignment → Update `on_duty.parquet` → Send convocation
-
-**Example:**
 ```
-Event: "Garde 15 janvier" (starts 2025-01-15 08h00, needs 3 people)
-
-2024-12-25 02h00 → Event synced from calendar
-2024-12-25 09h00 → Poll published to WhatsApp
-2024-12-25 10h00 → Alice votes "Présent" (1/3)
-2024-12-25 15h00 → Bob votes "Présent" (2/3)
-2024-12-26 10h00 → Reminder sent (23h elapsed)
-2024-12-26 14h00 → Claire votes "Présent" (3/3) ✓ Satisfied
-2024-12-26 12h00 → Assignment created, convocation sent
+Dec 25 02h00 → Calendar sync adds event
+Dec 25 09h00 → Poll created (21 days before Jan 15)
+Dec 25 10h00 → Alice votes Présent (1/3)
+Dec 25 14h00 → Bob votes Présent (2/3)
+Dec 26 10h00 → Reminder sent (no response after 23h)
+Dec 26 16h00 → Claire votes Présent (3/3) ← SATISFIED
+Dec 27 12h00 → Assignment created, convocation sent ← DONE
 ```
 
-**Key Rules:**
-- Poll published 21 days before event
-- Reminders every 23 hours (max 3)
-- Assignment when `votes >= headcount`
+**Decision Logic:**
 
+- **Publish?** → If `now >= start_date - 21 days` AND no `poll_uid` yet
+- **Remind?** → If `23h × (nb_reminder + 1)` elapsed AND `nb_reminder < 3`
+- **Satisfied?** → If `count(Présent votes) >= headcount`
+- **Assign?** → If satisfied AND not already assigned
+  
 ### 2. Participant Synchronization with Debouncing
 
 ```mermaid
