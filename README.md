@@ -111,16 +111,34 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Synced: Cron 02:00
-    Synced --> ReadyToPublish: scheduled_publication_date reached
-    ReadyToPublish --> Published: Cron 09:00
-    Published --> CollectingVotes: Poll sent to group
-    CollectingVotes --> CollectingVotes: New vote received
-    CollectingVotes --> NeedsReminder: Cron 10:00 & should_send_reminder()
-    CollectingVotes --> Satisfied: present_votes >= headcount
-    NeedsReminder --> CollectingVotes: Reminder sent
-    Satisfied --> Assigned: Cron 12:00
-    Assigned --> [*]: Convocation sent
+    [*] --> Synced
+    Synced --> ReadyToPublish: publication date reached
+    ReadyToPublish --> Published: cron 09h00
+    Published --> CollectingVotes: poll sent
+    CollectingVotes --> CollectingVotes: vote received
+    CollectingVotes --> NeedsReminder: cron 10h00 check
+    CollectingVotes --> Satisfied: headcount met
+    NeedsReminder --> CollectingVotes: reminder sent
+    Satisfied --> Assigned: cron 12h00
+    Assigned --> [*]
+    
+    note right of Synced
+        Cron 02h00 daily
+        Fetch & parse ICS
+        Filter future events
+        Bulk upsert
+    end note
+    
+    note right of Published
+        Poll created via WAHA
+        poll_uid stored
+        published_date set
+    end note
+    
+    note right of Satisfied
+        present_votes >= headcount
+        Ready for assignment
+    end note
 ```
 
 **Process Detail:**
@@ -664,6 +682,7 @@ poetry run pytest tests/ -v --cov=gardebot
 ```
 
 ---
+
 
 ## Troubleshooting
 
