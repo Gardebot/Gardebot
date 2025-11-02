@@ -1,279 +1,530 @@
 # Gardebot
 
-Gardebot is a Python 3.11 automation service that streamlines WhatsApp-based duty (“garde”) scheduling:
-
-- Pulls future duty events from an Infomaniak Calendar (ICS).
-- Publishes availability polls to a WhatsApp group via WAHA (WhatsApp HTTP API).
-- Collects Présent / Absent votes and tracks who hasn’t responded.
-- Monitors headcount satisfaction (on‑duty assignment saturation).
-- Issues day‑before holiday warnings (and scaffolds reminders / escalation for future use).
-- Exposes health and Prometheus metrics endpoints for observability.
-
-It is organized around a clear composition root, typed domain models (Pydantic), resilient HTTP abstractions, structured logging with correlation IDs, and atomic Parquet persistence (roadmap: relational DB).
+Gardebot is a Python 3.11 WhatsApp automation service for duty ("garde") scheduling. It integrates with Infomaniak Calendar and WAHA (WhatsApp HTTP API) to manage availability polling, vote collection, and on-duty assignments for a WhatsApp group.
 
 ---
 
-## 1. Architecture Overview
+## Overview
+
+Gardebot operates through three synchronized processes:
+
+1. **Scheduled Jobs** (cron-jobs container) — Periodic tasks that sync events, publish polls, send assignments, and warn about holidays
+2. **Webhook Processing** (gardebot container) — Real-time handling of WhatsApp events (messages, votes, group changes)
+3. **Data Persistence** — Atomic Parquet file storage for events, participants, votes, and assignments
+
+---
+
+## Architecture
+
+### System Components
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph External
-      Cal[Infomaniak Calendar] --> EventService
-      WAHA[WAHA Gateway]
+        Cal[Infomaniak Calendar ICS]
+        WA[WhatsApp via WAHA]
     end
-    WAHA -->|Webhook JSON| WebApp[/Flask /webhook/]
-    WebApp --> Dispatcher[EventDispatcher]
-    Dispatcher --> Core[Gardebot Root]
-    Core --> Adapters
-    Core --> Services
-    Services --> Repositories[(Parquet Storage)]
-    Cron[Scheduler Container] --> Services
-    Adapters --> WAHA
+    
+    subgraph Docker["Docker Compose Stack"]
+        subgraph Cron["cron-jobs container"]
+            Scheduler[APScheduler<br/>Blocking Mode]
+        end
+        
+        subgraph App["gardebot container"]
+            Flask[Flask Webhook Server]
+            Dispatcher[EventDispatcher]
+            Core[Gardebot Core]
+        end
+        
+        subgraph Gateway["waha container"]
+            WAHA[WAHA Gateway]
+        end
+    end
+    
+    subgraph Storage["Parquet Files"]
+        Events[events.parquet]
+        Sapeurs[sapeurs.parquet]
+        Votes[votes.parquet]
+        OnDuty[on_duty.parquet]
+    end
+    
+    Cal -->|ICS Feed| Scheduler
+    Scheduler --> Events
+    Scheduler -->|Publish Polls| WAHA
+    WAHA -->|Webhooks| Flask
+    Flask --> Dispatcher
+    Dispatcher --> Core
+    Core --> Storage
+    WAHA <-->|API Calls| Core
 ```
 
-### Webhook Processing
+### Request Flow: Webhook Processing
 
 ```mermaid
 sequenceDiagram
-    participant WAHA
-    participant Flask
-    participant Dispatcher
-    participant Gardebot
-    participant Service
-    WAHA->>Flask: POST /webhook (event=...)
-    Flask->>Flask: correlation_id = UUID (bind to logging)
-    Flask->>Dispatcher: dispatch(payload)
-    Dispatcher->>Gardebot: mapped handler()
-    Gardebot->>Service: domain operation
-    Service-->>Gardebot: result
-    Gardebot-->>Dispatcher: handled=True/False
-    Dispatcher-->>Flask: handled flag
-    Flask-->>WAHA: {handled, correlation_id}
+    participant W as WAHA
+    participant F as Flask /webhook
+    participant D as EventDispatcher
+    participant G as Gardebot Core
+    participant S as Services
+    participant R as Repositories
+    
+    W->>F: POST /webhook<br/>{event, payload}
+    F->>F: Generate correlation_id<br/>Bind to logging context
+    F->>F: Record metrics<br/>(start timer)
+    F->>D: dispatch(payload)
+    
+    alt event == "poll.vote"
+        D->>G: handle_incoming_vote()
+        G->>S: PollService.handle_webhook_payload()
+        S->>R: VoteRepository.upsert()
+        S->>R: OnDutyService.process_assignment()
+        S-->>G: Assignment created
+        G->>W: Send convocation message
+    else event == "message"
+        D->>G: handle_incoming_message()
+        G->>S: MessageService.handle_webhook_payload()
+    else event == "group.v2.participants"
+        D->>D: Trigger debounced sync<br/>(wait 30s for batch)
+        Note over D: Reset timer on each trigger
+        D-->>S: After debounce: SapeurService.synchronize_sapeurs()
+    else event == "session.status"
+        alt status contains "WORKING"
+            D->>D: Trigger debounced initialize<br/>(wait 30s)
+            D-->>G: After debounce: initialize()
+        end
+    end
+    
+    D-->>F: handled: true/false
+    F->>F: Record metrics<br/>(duration, count, errors)
+    F->>F: Clear correlation_id
+    F-->>W: 200 OK {handled, correlation_id}
 ```
 
-### Debounced Participant Sync
+---
+
+## Process Flows
+
+### 1. Event Lifecycle (Calendar → Poll → Vote → Assignment)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Synced: sync_events()<br/>(cron: 02:00)
+    
+    Synced --> ReadyToPublish: scheduled_publication_date reached
+    ReadyToPublish --> Published: publish_polls()<br/>(cron: 09:00)
+    
+    Published --> CollectingVotes: Poll sent to WhatsApp group
+    CollectingVotes --> CollectingVotes: poll.vote webhook<br/>Update vote matrix
+    
+    CollectingVotes --> Satisfied: Present votes >= headcount
+    CollectingVotes --> NeedsReminder: Time for reminder &<br/>still unsatisfied
+    
+    NeedsReminder --> CollectingVotes: send_reminders()<br/>(cron: 10:00)
+    
+    Satisfied --> Assigned: assign_on_duty_for_events()<br/>(cron: 12:00)
+    Assigned --> [*]: Convocation sent
+    
+    note right of Synced
+        - Fetch ICS from Infomaniak
+        - Filter future events only
+        - Drop rows with NA values
+        - Suffix duplicate names
+        - Bulk upsert to events.parquet
+    end note
+    
+    note right of Published
+        - Check: not already assigned
+        - Check: scheduled_publication_date <= now
+        - Create WhatsApp poll via WAHA
+        - Store poll_uid in event record
+    end note
+    
+    note right of Satisfied
+        - Count "Présent" votes in vote matrix
+        - Compare to event.headcount
+        - If satisfied: create assignment
+        - Send formatted convocation message
+    end note
+```
+
+**Key Points:**
+
+- **Event Sync** (02:00 daily): Downloads ICS, extracts future events, performs data cleaning (removes NA, handles duplicate titles), and bulk-upserts new events to `events.parquet`
+- **Poll Publication** (09:00 daily): Iterates events where `scheduled_publication_date <= now` and `is_assigned() == False`, creates WhatsApp poll via WAHA API, stores `poll_uid`
+- **Vote Collection** (real-time): Each `poll.vote` webhook updates the vote matrix (`votes.parquet`) with voter's response (Présent/Absent)
+- **Assignment** (12:00 daily): When `present_count >= event.headcount`, creates assignment in `on_duty.parquet` and sends WhatsApp convocation message
+
+### 2. Participant (Sapeur) Synchronization
 
 ```mermaid
 sequenceDiagram
-    WAHA->>Flask: group.v2.participants
-    Flask->>Dispatcher: dispatch
-    Dispatcher->>Debouncer: trigger()
-    Note right of Debouncer: Subsequent triggers reset wait window
-    Debouncer->>SapeurService: synchronize_sapeurs()
-    SapeurService->>SapeurRepo: bulk_upsert + delete stale
+    participant W as WAHA
+    participant D as EventDispatcher
+    participant Deb as Debouncer<br/>(30s window)
+    participant Svc as SapeurService
+    participant Repo as SapeurRepository
+    
+    Note over W: User joins/leaves group
+    W->>D: group.v2.participants event (1)
+    D->>Deb: trigger()
+    Note over Deb: Start 30s timer
+    
+    W->>D: group.v2.participants event (2)
+    D->>Deb: trigger()
+    Note over Deb: Reset timer (30s again)
+    
+    W->>D: group.v2.participants event (3)
+    D->>Deb: trigger()
+    Note over Deb: Reset timer (30s again)
+    
+    Note over Deb: 30s elapsed, no new triggers
+    Deb->>Svc: synchronize_sapeurs()
+    Svc->>W: GET group participants
+    W-->>Svc: Current member list
+    Svc->>Repo: Load existing sapeurs.parquet
+    Svc->>Svc: Identify new members
+    Svc->>Svc: Identify departed members
+    Svc->>Repo: Bulk upsert new members
+    Svc->>Repo: Delete departed members
+    Svc->>Repo: Save updated sapeurs.parquet
+```
+
+**Purpose:** Debouncing prevents multiple rapid API calls when several members join/leave simultaneously (e.g., group creation, mass removal). The 30-second window batches all changes into a single synchronization.
+
+### 3. Data Persistence Strategy
+
+```mermaid
+graph TD
+    A[Operation Request] --> B{Read or Write?}
+    
+    B -->|Read| C[Load entire Parquet file]
+    C --> D[Return as DataFrame]
+    
+    B -->|Write| E[Load existing Parquet<br/>or create empty DataFrame]
+    E --> F{Operation Type}
+    
+    F -->|Upsert Events| G[Append new rows<br/>Idempotent: duplicates ignored]
+    F -->|Upsert Sapeurs| H[Append new rows<br/>Delete departed rows]
+    F -->|Update Vote| I[Wide matrix update<br/>rows=sapeur names<br/>cols=poll_strings<br/>values=True/False/NaN]
+    F -->|Update Assignment| J[Wide matrix update<br/>rows=sapeur names<br/>cols=poll_strings<br/>values=True/False]
+    
+    G --> K[Write entire DataFrame<br/>Atomic file replacement]
+    H --> K
+    I --> K
+    J --> K
+    
+    K --> L[Parquet file on disk]
+    
+    style K fill:#f9f,stroke:#333,stroke-width:2px
+```
+
+**File Structure:**
+
+| File | Schema | Update Pattern |
+|------|--------|----------------|
+| **events.parquet** | `[title, start_date, end_date, location, headcount, poll_string, poll_uid, ...]` | Bulk append (new events only) |
+| **sapeurs.parquet** | `[uid, name, phone, pushname, joined_date]` | Insert new + delete departed |
+| **votes.parquet** | Wide matrix: rows=`sapeur_name`, cols=`poll_string_N`, cells=`True/False/NaN` | Cell updates (NaN = no vote yet) |
+| **on_duty.parquet** | Wide matrix: rows=`sapeur_name`, cols=`poll_string_N`, cells=`True/False` | Row-level assignment flags |
+
+**Atomicity:** Each write operation loads the entire file, modifies in-memory DataFrame, then performs atomic replacement. Suitable for single-instance deployment; concurrent writes would require database migration.
+
+---
+
+## Scheduled Jobs (cron-jobs container)
+
+The scheduler container runs five periodic tasks in the `Europe/Zurich` timezone:
+
+```python
+scheduler.add_job(sync_events,        "cron", hour=2)   # 02:00 AM
+scheduler.add_job(publish_polls,      "cron", hour=9)   # 09:00 AM
+scheduler.add_job(send_reminders,     "cron", hour=10)  # 10:00 AM
+scheduler.add_job(send_assignments,   "cron", hour=12)  # 12:00 PM
+scheduler.add_job(warn_holidays,      "cron", hour=12)  # 12:00 PM
+```
+
+### Task Details
+
+| Time | Function | Description |
+|------|----------|-------------|
+| **02:00** | `sync_events()` | Fetch ICS from Infomaniak → parse future events → clean data → bulk upsert to `events.parquet` |
+| **09:00** | `publish_polls()` | Find events where `scheduled_publication_date <= now` AND not assigned → create WhatsApp poll → store `poll_uid` |
+| **10:00** | `send_reminders()` | Check each event's `should_send_reminder()` → send WhatsApp message with mentions → increment `event.nb_reminder` |
+| **12:00** | `send_assignments()` | For each satisfied event (`present_votes >= headcount`) → create assignment → send convocation message |
+| **12:00** | `warn_holidays()` | Check Swiss (Geneva) holidays → if `days_until == PREVENTION_DAY_BEFORE_HOLIDAY` → notify admin |
+
+**Note:** Reminders are scaffolded but currently disabled in production until full workflow validation.
+
+---
+
+## Domain Models
+
+### Event
+
+```python
+class Event:
+    title: str
+    start_date: pd.Timestamp
+    end_date: pd.Timestamp
+    location: str
+    headcount: int
+    poll_string: str              # "Title | DD.MM.YYYY HH:MM - DD.MM.YYYY HH:MM | Location"
+    poll_uid: Optional[str]
+    scheduled_publication_date: pd.Timestamp
+    nb_reminder: int
+    
+    def should_send_reminder(self) -> bool:
+        """Reminder logic based on time_until_event and nb_reminder."""
+    
+    def is_assigned(self) -> bool:
+        """Check if on_duty.parquet contains assignment for this poll_string."""
+```
+
+**poll_string** serves as the primary logical key linking events, votes, and assignments.
+
+### Sapeur (Participant)
+
+```python
+class Sapeur:
+    uid: str         # WhatsApp contact ID
+    name: str
+    phone: str
+    pushname: str
+    joined_date: pd.Timestamp
+```
+
+### Vote
+
+Stored as wide matrix in `votes.parquet`:
+- **Rows:** Sapeur names
+- **Columns:** `poll_string_1`, `poll_string_2`, ...
+- **Values:** `True` (Présent), `False` (Absent), `NaN` (no response)
+
+### OnDutyAssignment
+
+```python
+class OnDutyAssignment:
+    event: Event
+    sapeur_list: List[Sapeur]
+```
+
+Stored as wide matrix in `on_duty.parquet`:
+- **Rows:** Sapeur names
+- **Columns:** `poll_string_1`, `poll_string_2`, ...
+- **Values:** `True` (assigned), `False` (not assigned)
+
+---
+
+## Code Organization
+
+```
+src/gardebot/
+├── adapters/          # High-level WAHA wrappers (polling, messaging, groups)
+├── common/            # Utilities (logging, debounce, storage helpers, formatting)
+├── http/              # Resilient HTTP client (retries, backoff, jitter)
+├── integrations/      # External service clients (Infomaniak ICS, WAHA API)
+├── models/            # Pydantic domain models (Event, Sapeur, VoteRecord, etc.)
+├── services/          # Business logic orchestration
+│   ├── events.py      # Event synchronization
+│   ├── poll_service.py # Poll publication & vote processing
+│   ├── sapeur.py      # Participant roster management
+│   ├── votes.py       # Vote matrix operations
+│   ├── onduty.py      # Assignment logic
+│   └── message_service.py # WhatsApp messaging (convocation, reminders)
+├── app.py             # Flask application (webhook, health, metrics endpoints)
+├── dispatcher.py      # Event routing with debouncing
+├── gardebot.py        # Composition root (dependency injection)
+├── repositories.py    # Parquet persistence layer
+├── scheduler.py       # APScheduler cron job definitions
+├── settings.py        # Configuration (environment variables, secrets)
+└── validation.py      # Webhook payload validation
 ```
 
 ---
 
-## 2. Folder Glossary (src/gardebot)
+## Configuration
 
-| Path | Purpose |
-|------|---------|
-| adapters | High-level WAHA interaction wrappers (polling, messaging, groups, contacts). |
-| common | Cross-cutting utilities (logging configuration, debounce, storage helpers, secret & formatting helpers). |
-| http | Resilient HTTP client with retries, exponential backoff & jitter, structured errors. |
-| integrations | External clients (Infomaniak calendar parser; WAHA client using `HttpClient`). |
-| models | Pydantic domain objects (Event, Sapeur, VoteRecord, OnDutyAssignment, ParticipationScore, MessageEventEnvelope). |
-| services | Orchestrated business logic (event sync, poll publication, vote handling, roster sync, messaging echo, nomination scoring, on‑duty assignment). |
-| app.py | Flask app factory (webhook, health, metrics) + correlation ID binding & metrics emission. |
-| dispatcher.py | Exact event → handler map; debounced initialization & participant sync triggers. |
-| gardebot.py | Composition root constructing adapters & services; entry handlers (initialize, process_vote, message, holiday warning). |
-| repositories.py | Atomic Parquet persistence layer for events, sapeurs, votes, and on‑duty matrix (raising `NotFoundError` when missing). |
-| scheduler.py | APScheduler cron jobs (event sync, poll publication, holiday warning). |
-| settings.py | Typed configuration (server, API, logging, retry/backoff) + secret load. |
-| validation.py | Strict message event validation + basic shape check for non‑message events. |
+### Environment Variables
 
----
+**Server:**
+- `SERVER_HOST` (default: `0.0.0.0`)
+- `SERVER_PORT` (default: `5000`)
+- `SERVER_DEBUG` (default: `false`)
+- `POSTPONE_SYNC_TIME` (default: `30`) — Debounce window in seconds
 
-## 3. Core Domain Concepts
+**WAHA Integration:**
+- `WAHA_BASE_URL` (default: `http://waha:3000`)
+- `WAHA_SESSION` (default: `default`)
+- `API_KEY` (secret, required) — WAHA API authentication
 
-| Concept | Summary |
-|---------|---------|
-| Event | Future duty slot with headcount; derives `poll_string`, publication schedule, reminder counters. |
-| Poll String | French human-readable composite: title + formatted dates + location; primary logical key for votes/assignments. |
-| Sapeur | Participant (uid, name, phone, pushname, joined date). |
-| Vote | Availability entry: `Présent`, `Absent`, or null (no response yet). |
-| On-Duty Assignment | Collection of sapeurs considered “satisfied” once presence count >= headcount. |
-| Nomination | Fallback fairness scoring (non‑responding / absent pools) using participation metrics (roadmap). |
+**Calendar:**
+- `CALENDAR_URL` (secret, required) — Infomaniak ICS endpoint
+
+**Logging:**
+- `LOG_LEVEL` (default: `INFO`)
+- `LOG_JSON` (default: `false`)
+
+**Secrets (via Doppler or .env):**
+- `ADMIN_NUMBER` — International format phone number for admin notifications
+- `PREVENTION_DAY_BEFORE_HOLIDAY` — Days ahead to warn about holidays
 
 ---
 
-## 4. Event Lifecycle
+## Observability
 
-1. Sync: Fetch ICS (future events only), clean rows (drop NA, suffix duplicates), bulk upsert new events.
-2. Publication: At or after `scheduled_publication_date` (and not yet assigned/published) send poll to group.
-3. Vote Ingestion: `poll.vote` webhook parsed → voter resolved → vote persisted → metrics updated.
-4. Headcount Check: Present votes compared to `event.headcount` to decide if assignment condition is satisfied.
-5. Reminder (scaffolded): Timing & count logic available; reminders currently disabled until workflow completion.
-6. Holiday Warning: Day‑before holiday detection sends proactive admin notification.
+### Metrics (Prometheus)
 
----
+Endpoint: `http://localhost:5000/metrics`
 
-## 5. Persistence
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `gardebot_webhook_events_total` | Counter | `event`, `handled` | Total webhook events received |
+| `gardebot_webhook_errors_total` | Counter | `event`, `code` | Errors by event type and code |
+| `gardebot_webhook_latency_seconds` | Histogram | `event` | Processing duration distribution |
+| `gardebot_participant_sync_total` | Counter | — | Debounced roster sync count |
+| `gardebot_initialize_total` | Counter | — | Full initialization count |
+| `gardebot_poll_publish_total` | Counter | `status` | Poll publication success/failure |
+| `gardebot_vote_processed_total` | Counter | `result` | Vote processing outcomes |
 
-| File | Role | Notes |
-|------|------|-------|
-| events.parquet | Event catalog | Bulk upsert only adds new rows (idempotent). |
-| sapeurs.parquet | Roster snapshot | Sync inserts new + deletes departed participants. |
-| votes.parquet | Wide matrix (rows=sapeur names; cols=poll_string; cells=True/False/NaN) | NaN means no response yet. |
-| on_duty.parquet | Wide assignment matrix (True flags presence in assignment) | Used to test satisfaction state. |
+### Correlation IDs
 
-Atomic full rewrites ensure consistency; concurrency risks are minimized in single-instance usage. Migration path: relational DB with row-level updates.
+Each webhook request generates a UUID correlation ID:
+1. Bound to logging context via `structlog`
+2. Included in all log entries for that request
+3. Returned in webhook response
+4. Cleared after request completion
 
----
+Example log entry:
+```json
+{
+  "event": "poll.vote",
+  "correlation_id": "a1b2c3d4-...",
+  "poll_string": "Garde | 15.01.2025 08:00 - 16.01.2025 08:00 | Caserne",
+  "voter": "John Doe",
+  "vote": "Présent",
+  "timestamp": "2025-01-10T09:15:23Z"
+}
+```
 
-## 6. Configuration & Secrets
+### Health Check
 
-- Centralized in `settings.py` via Pydantic models.
-- Environment variables for host/port, WAHA base URL, session, timeouts, retry policy, logging format.
-- Secrets (API key, calendar URL, admin number) injected via Doppler or `.env`.
-- `POSTPONE_SYNC_TIME` controls debounce window.
+Endpoint: `http://localhost:5000/health`
 
----
+Response:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-10T12:00:00Z"
+}
+```
 
-## 7. Observability
-
-| Metric | Type | Labels | Meaning |
-|--------|------|--------|---------|
-| gardebot_webhook_events_total | Counter | event, handled | Inbound webhook throughput. |
-| gardebot_webhook_errors_total | Counter | event, code | Error occurrences by event & code. |
-| gardebot_webhook_latency_seconds | Histogram | event | Processing duration. |
-| gardebot_participant_sync_total | Counter | - | Debounced roster sync executions. |
-| gardebot_initialize_total | Counter | - | Full initialization runs. |
-| gardebot_poll_publish_total | Counter | status | Poll publish success/failure counts. |
-| gardebot_vote_processed_total | Counter | result | Vote processing success/errors. |
-
-Correlation ID (UUID) per request for end-to-end log trace.
-
----
-
-## 8. Scheduler (cron-jobs)
-
-| Time (Europe/Zurich) | Job | Purpose |
-|----------------------|-----|---------|
-| 02:00 | sync_events | Refresh events from calendar. |
-| 09:00 | publish_polls | Publish due polls. |
-| 12:00 | warn_holidays | Send admin holiday warning. |
-
-Future: Reminders, escalation, analytics rollups.
+Docker healthcheck runs every 30s with 3 retries.
 
 ---
 
-## 9. Extensibility Playbook
+## Deployment
 
-| Goal | Steps |
-|------|-------|
-| New event type | Add envelope model → register in dispatcher → implement handler → create metrics & docs. |
-| New scheduled task | Add function in `scheduler.py` → register cron → instrument metrics. |
-| DB migration | Abstract repositories → implement SQL layer → migrate DataFrames to normalized tables. |
-| Reminder workflow | Reactivate cron, use `Event.should_send_reminder()` → send targeted mentions (MessagingAdapter). |
-| Localization | Externalize French strings; inject via config; toggle language parameter. |
-| Fair assignment | Introduce scoring + rotation metadata; decouple poll publication & assignment decision. |
+### Docker Compose
 
----
+Three containers orchestrated in `docker-compose.yaml`:
 
-## 10. Testing Guidance
+```yaml
+services:
+  waha:          # WhatsApp HTTP API gateway
+  gardebot:      # Flask webhook server
+  cron-jobs:     # APScheduler daemon
+```
 
-| Area | What to Verify |
-|------|----------------|
-| Webhook | Valid JSON path, correlation ID presence, latency metric recorded. |
-| Dispatcher | Exact matching, unhandled event path, debounce correctness (time mocks). |
-| Repositories | Upsert semantics, `NotFoundError` behavior, assignment satisfaction logic. |
-| Calendar | Duplicate name suffixing, NA row dropping, future-only filtering. |
-| Poll Publication | Guard conditions: not due / already assigned / missing poll UID scenarios. |
-| Votes | Accepted values & rejection of invalid ones; matrix cell updates. |
-| Roster Sync | Insertions + deletions after simulated membership change. |
-| Nomination | Score calculation & margin handling (when activated). |
-| HTTP | Retry/backoff & error propagation. |
-| Logging | Correlation ID cleared post-request (no leakage). |
+**Startup:**
+```bash
+docker compose up --build
+```
 
----
+**Ports:**
+- `3000` → WAHA dashboard
+- `5000` → Gardebot webhook/metrics
 
-## 11. Roadmap
+**Volumes:**
+- `./.sessions:/app/.sessions` — WAHA session persistence
+- Parquet files stored in container filesystem (consider volume mount for production)
 
-1. Typed envelopes for all non‑message events.
-2. Database persistence (transactional row updates & concurrent safety).
-3. Automated reminders + escalation (late responders).
-4. Participation analytics & visualization endpoint.
-5. Localization (multi‑language polls & messages).
-6. Decoupled assignment workflow + admin override UI.
-7. Incremental calendar diff ingestion (avoid full rescan).
-8. Request signature verification / auth gating (security hardening).
-9. Advanced nomination fairness (rotation & fatigue scoring).
-
----
-
-## 12. Quick Start
+### Local Development
 
 ```bash
 # Install dependencies
 poetry install
 
-# Run locally
-poetry run python -m gardebot.app
+# Activate virtual environment
+poetry shell
 
-# Or using Docker
-docker compose up --build
+# Run webhook server
+python -m gardebot.app
+
+# Run scheduler (separate terminal)
+python -m gardebot.scheduler
 ```
 
-Containers launched:
-- waha: WAHA gateway
-- gardebot: Flask webhook + core logic
-- cron-jobs: Scheduled tasks
+---
 
-Required environment:
-- API_KEY (WAHA)
-- CALENDAR_URL (Infomaniak ICS)
-- ADMIN_NUMBER (international format, for holiday warning convocation)
-Optional:
-- LOG_LEVEL, LOG_JSON, POSTPONE_SYNC_TIME (debounce tuning)
+## Testing Strategy
+
+| Component | Test Focus |
+|-----------|------------|
+| **Webhooks** | Valid/invalid payloads, correlation ID propagation, metric recording |
+| **Dispatcher** | Exact event matching, debounce timing (with time mocks), unhandled events |
+| **Repositories** | Upsert idempotency, `NotFoundError` conditions, matrix operations |
+| **Event Service** | Duplicate name suffixing, NA filtering, future-only events |
+| **Poll Service** | Publication guards (not due/already assigned), poll UID tracking |
+| **Vote Service** | Matrix updates, invalid vote rejection, headcount satisfaction |
+| **Sapeur Service** | Bulk insert/delete, debounced sync behavior |
+| **HTTP Client** | Retry/backoff logic, error propagation, jitter randomization |
+| **Assignment Logic** | Satisfaction conditions, convocation message formatting |
 
 ---
 
-## 13. Operational FAQ
+## Roadmap
 
-| Symptom | Cause | Action |
-|---------|-------|--------|
-| No events loaded | Missing/invalid `CALENDAR_URL` | Set secret; trigger initialization or wait for 02:00 sync. |
-| Poll not published | Not due / already satisfied | Check `scheduled_publication_date` & `is_assigned()`. |
-| Vote ignored | Headcount already met | Confirm assignment state; ignore further votes. |
-| Roster stale | Debounce delay or missed sync | Lower `POSTPONE_SYNC_TIME` or force initialize. |
-| Metrics empty | Scrape misconfig or endpoint unreachable | Curl `/metrics`; inspect logs/Prometheus setup. |
-| Duplicate holiday notices | Incorrect prevention constant | Adjust config (e.g. `PREVENTION_DAY_BEFORE_HOLIDAY`). |
-
----
-
-## 14. Design Principles
-
-- Clear layering (Adapters → Services → Repositories → Models).
-- Deterministic state (atomic parquet writes; planned DB evolution).
-- Observability-first (metrics & correlation IDs early).
-- Minimal coupling (poll publication conditions separated from vote handling).
-- Debounce to reduce noisy participant churn impact.
+1. **Typed Event Envelopes** — Pydantic models for all webhook events
+2. **Database Migration** — PostgreSQL with transactional guarantees
+3. **Reminder Workflow** — Enable automated reminders with escalation
+4. **Analytics Dashboard** — Participation metrics and visualizations
+5. **Multi-Language Support** — Externalize strings, support locale switching
+6. **Assignment Override** — Admin UI for manual assignment adjustments
+7. **Incremental Calendar Sync** — Diff-based updates vs. full rescan
+8. **Webhook Signature Verification** — Security hardening with HMAC
+9. **Nomination Fairness** — Advanced scoring (rotation, fatigue, preferences)
+10. **Automated Testing** — CI/CD pipeline with unit/integration tests
 
 ---
 
-## 15. Portfolio Highlights
+## Troubleshooting
 
-When showcasing:
-- Typed domain & message envelope boundaries.
-- Resilient HTTP with exponential backoff/jitter.
-- Structured logging + per-request correlation IDs.
-- Separation of scheduled jobs into dedicated container.
-- Extensibility roadmap demonstrating forward-thinking architecture.
+| Symptom | Likely Cause | Solution |
+|---------|--------------|----------|
+| No events loaded | Missing/invalid `CALENDAR_URL` | Verify secret, check ICS endpoint accessibility |
+| Poll not published | Not due OR already assigned | Check `scheduled_publication_date`, verify `is_assigned()` |
+| Votes ignored | Headcount satisfied | Check assignment state, confirm `present_count < headcount` |
+| Stale roster | Debounce too long OR missed trigger | Lower `POSTPONE_SYNC_TIME`, force `initialize()` |
+| Missing metrics | Scrape config OR endpoint down | Verify `/metrics` accessible, check Prometheus config |
+| Duplicate holiday warnings | Incorrect prevention constant | Adjust `PREVENTION_DAY_BEFORE_HOLIDAY` |
+| Session disconnected | WAHA session expired | Check WAHA logs, scan QR code to re-authenticate |
 
 ---
 
-## 16. License & Acknowledgements
+## License
 
-See `LICENSE`.
+See `LICENSE` file.
 
-Acknowledgements:
-- WAHA project
-- Infomaniak (Calendar & Kdrive)
-- Doppler (secrets)
+---
+
+## Acknowledgements
+
+- [WAHA](https://waha.devlike.pro/) — WhatsApp HTTP API
+- [Infomaniak](https://www.infomaniak.com/) — Calendar hosting
+- [Doppler](https://www.doppler.com/) — Secrets management
 - Python OSS community
 
 ---
 
-Happy automating! 🚀
+**Built with structured logging, typed domain models, and resilient HTTP abstractions.** 🚀
