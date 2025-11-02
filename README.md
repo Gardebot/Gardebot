@@ -108,17 +108,17 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Synced: Cron 02h00 daily
-    Synced --> WaitingToPublish: Event in system
-    WaitingToPublish --> WaitingToPublish: Date not reached
-    WaitingToPublish --> Published: Cron 09h00 when ready
-    Published --> CollectingVotes: Poll active
-    CollectingVotes --> CollectingVotes: New vote received
-    CollectingVotes --> SendReminder: Cron 10h00 if needed
-    SendReminder --> CollectingVotes: Reminder sent
-    CollectingVotes --> Satisfied: Enough votes
-    Satisfied --> Assigned: Cron 12h00
-    Assigned --> [*]: Complete
+    [*] --> Synced
+    Synced --> WaitingToPublish
+    WaitingToPublish --> WaitingToPublish
+    WaitingToPublish --> Published
+    Published --> CollectingVotes
+    CollectingVotes --> CollectingVotes
+    CollectingVotes --> SendReminder
+    CollectingVotes --> Satisfied
+    SendReminder --> CollectingVotes
+    Satisfied --> Assigned
+    Assigned --> [*]
 ```
 
 **Complete Process:**
