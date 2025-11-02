@@ -9,6 +9,7 @@ import pandas as pd  # type: ignore[import-untyped]
 from gardebot.adapters.contacts import ContactAdapter
 from gardebot.adapters.groups import GroupAdapter
 from gardebot.common.logging_configuration import get_logger
+from gardebot.config import GROUP_ID_GARDE_ET_PIQUET
 
 LOGGER = get_logger(__name__)
 
@@ -16,10 +17,10 @@ LOGGER = get_logger(__name__)
 class GroupService:
     """Encapsulates group-related WAHA interactions."""
 
-    def __init__(self) -> None:
+    def __init__(self, group_id: str = GROUP_ID_GARDE_ET_PIQUET) -> None:
         """Sender: object providing send_text(to_number: str, message_text: str) and (optionally later) other message-related operations."""
         self.contact = ContactAdapter()
-        self.group = GroupAdapter()
+        self.group = GroupAdapter(group_id=group_id)
 
     def fetch_group_participants_table(self) -> pd.DataFrame:
         """Return DataFrame of participant contact info enriched with joined_date and group_id."""

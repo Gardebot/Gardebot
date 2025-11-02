@@ -66,10 +66,14 @@ class PollingAdapter(WahaClient):
     def _extract_sapeur_from_payload(self, data: Dict[str, Any]) -> Sapeur:
         """Extract the sapeur object from the webhook payload."""
         info = self._extract_info_from_data(data)
-        tmp_voter_id = info.get("SenderAlt")
-        if not tmp_voter_id:
+        sender_alt: Optional[str] = info.get("SenderAlt")
+        if not sender_alt:
             raise NotFoundError(detail={"resource": "SenderAlt", "Info": info})
-        voter_id = tmp_voter_id.split("@")[0] + "@c.us"
+        tmp_voter_id = sender_alt.split("@")[0]
+        if ":" in tmp_voter_id:
+            voter_id = tmp_voter_id.split(":")[0] + "@c.us"
+        else:
+            voter_id = tmp_voter_id.split("@")[0] + "@c.us"
         sapeur = self._sapeur_repo.find_by_uid(voter_id)
         return sapeur
 
