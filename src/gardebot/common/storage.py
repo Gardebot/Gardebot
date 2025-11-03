@@ -112,8 +112,7 @@ class FileStorage:
         with lock:
             tmp_df = self.read_parquet(filename)
             df = modifier_fn(tmp_df)
-            if not df.equals(tmp_df):
-                self.atomic_write(df, filename)
+            self.atomic_write(df, filename)
             return df
 
 
@@ -123,3 +122,5 @@ def ensure_columns(df: pd.DataFrame, required: Iterable[str]) -> pd.DataFrame:
         if col not in df.columns:
             df[col] = None
     return df
+
+
