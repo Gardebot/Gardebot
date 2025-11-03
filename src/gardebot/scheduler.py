@@ -57,8 +57,8 @@ if __name__ == "__main__":
     scheduler = BlockingScheduler(timezone="Europe/Zurich")
     scheduler.add_job(sync_events, "cron", hour=2)
     scheduler.add_job(warn_holidays, "cron", hour=12)
-    scheduler.add_job(send_assignments, "cron", hour=12)
-    scheduler.add_job(send_reminders, "cron", hour=10)
+    scheduler.add_job(send_assignments, "cron", hour=10)
+    scheduler.add_job(send_reminders, "cron", hour=11)
     scheduler.add_job(publish_polls, "cron", hour=9)
     try:
         scheduler.start()

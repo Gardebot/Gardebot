@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import io
 import os
-from typing import Iterable
+import threading
+from typing import Callable, Iterable
 
 import pandas as pd  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
@@ -29,6 +30,15 @@ class FileStorage:
         self.pwd = os.environ["KDRIVE_PWD"]
         self.kdrive_id = os.environ["KDRIVE_ID"]
         self.folder = os.environ["KDRIVE_FOLDER"]
+        self._locks: dict[str, threading.RLock] = {}
+        self._locks_lock = threading.Lock()
+
+    def _get_lock(self, filename: str) -> threading.RLock:
+        """Get or create a lock for a specific file."""
+        with self._locks_lock:
+            if filename not in self._locks:
+                self._locks[filename] = threading.RLock()
+            return self._locks[filename]
 
     def _webdav_base_url(self) -> str:
         """Return base WebDAV folder URL."""
@@ -85,14 +95,26 @@ class FileStorage:
             LOGGER.warning("Failed to write CSV %s (status %s)", filename, resp.status_code)
 
     def atomic_write(self, df: pd.DataFrame, filename: str, also_csv: bool = True) -> None:
-        """High-level write (parquet + optional CSV)."""
-        LOGGER.info("Writing file %s (rows=%d, also_csv=%s)", filename, len(df), also_csv)
-        self.write_parquet(df, filename)
-        if also_csv:
-            try:
-                self.write_csv(df, filename)
-            except (requests.RequestException, OSError) as exc:
-                LOGGER.exception("CSV write failed for %s: %s", filename, exc)
+        """High-level write (parquet + optional CSV) with file-level locking."""
+        lock = self._get_lock(filename)
+        with lock:
+            LOGGER.info("Writing file %s (rows=%d, also_csv=%s)", filename, len(df), also_csv)
+            self.write_parquet(df, filename)
+            if also_csv:
+                try:
+                    self.write_csv(df, filename)
+                except (requests.RequestException, OSError) as exc:
+                    LOGGER.exception("CSV write failed for %s: %s", filename, exc)
+
+    def atomic_read_modify_write(self, filename: str, modifier_fn: Callable[[pd.DataFrame], pd.DataFrame]) -> pd.DataFrame:
+        """Atomically read, modify, and write a file."""
+        lock = self._get_lock(filename)
+        with lock:
+            tmp_df = self.read_parquet(filename)
+            df = modifier_fn(tmp_df)
+            if not df.equals(tmp_df):
+                self.atomic_write(df, filename)
+            return df
 
 
 def ensure_columns(df: pd.DataFrame, required: Iterable[str]) -> pd.DataFrame:
