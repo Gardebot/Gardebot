@@ -112,6 +112,10 @@ class FileStorage:
         with lock:
             tmp_df = self.read_parquet(filename)
             df = modifier_fn(tmp_df)
+            if "uid" in tmp_df.columns and "uid" in df.columns:
+                if set(tmp_df["uid"]) == set(df["uid"]):
+                    LOGGER.info("No changes detected in %s; skipping write.", filename)
+                    return df
             self.atomic_write(df, filename)
             return df
 
@@ -122,5 +126,3 @@ def ensure_columns(df: pd.DataFrame, required: Iterable[str]) -> pd.DataFrame:
         if col not in df.columns:
             df[col] = None
     return df
-
-
