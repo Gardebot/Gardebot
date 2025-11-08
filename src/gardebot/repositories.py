@@ -281,7 +281,7 @@ class OnDutyRepository:
 
         def modify(df: pd.DataFrame) -> pd.DataFrame:
             for sap in assignment.sapeur_list:
-                df.at[sap.name, assignment.event.poll_string] = True
+                df.at[sap.name, assignment.event.poll_string] = assignment.assigned
             return df
 
         self.storage.atomic_read_modify_write(ONDUTY_FILE, modify)
