@@ -64,7 +64,7 @@ class MessagingAdapter(WahaClient):
     ) -> Dict[str, Any]:
         """Build payload with mentions for given sapeur names."""
         mentions = [sap.uid for sap in sapeur_list]
-        text_mention = ", ".join(["@" + sap.phone[1:] for sap in sapeur_list])
+        text_mention = " , ".join(["@" + sap.phone[1:] for sap in sapeur_list])
         payload: Dict[str, Any] = {
             "session": self.session,
             "chatId": to_number,
@@ -112,7 +112,9 @@ class MessagingAdapter(WahaClient):
     ) -> Dict[str, Any]:
         """Send group convocation message with mentions."""
         payload = self._build_mentions_payload(to_number=to_number, sapeur_list=assignment.sapeur_list, reply_to=assignment.event.poll_uid)
-        payload["text"] = f"Merci à {payload['text']} pour la garde: {assignment.event.poll_string}. Vous êtes convoqué.e.s."
+        payload["text"] = (
+            f"Merci à {payload['text']} pour la garde: {assignment.event.poll_string}. Vous êtes convoqué.e.s et merci pour votre engagement :)"  # noqa: E501
+        )
         LOGGER.info("sending_group_convocation", poll_string=assignment.event.poll_string, to=to_number)
         return self._post_json(self.endpoint, payload)
 
