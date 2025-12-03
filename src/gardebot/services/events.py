@@ -51,7 +51,8 @@ class EventService:
 
     def list_events(self) -> List[Event]:
         """Return all events."""
-        return self.repo.list_events()
+        retour = self.repo.list_events()
+        return self._propagate_publication_dates(retour)  # Quick fix to ensure propagated dates on read as well
 
     def assign_poll_published_date(self, event: Event) -> Event:
         """Set published date for event."""

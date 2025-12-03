@@ -4,7 +4,7 @@ networks:
 
 services:
   waha:
-    image: devlikeapro/waha:latest-2025.11.1
+    image: devlikeapro/waha:latest-2025.11.4
     container_name: waha
     restart: unless-stopped
     environment:
