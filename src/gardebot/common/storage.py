@@ -119,6 +119,15 @@ class FileStorage:
             self.atomic_write(df, filename)
             return df
 
+    def force_atomic_read_modify_write(self, filename: str, modifier_fn: Callable[[pd.DataFrame], pd.DataFrame]) -> pd.DataFrame:
+        """Force atomically read, modify, and write a file."""
+        lock = self._get_lock(filename)
+        with lock:
+            tmp_df = self.read_parquet(filename)
+            df = modifier_fn(tmp_df)
+            self.atomic_write(df, filename)
+            return df
+
 
 def ensure_columns(df: pd.DataFrame, required: Iterable[str]) -> pd.DataFrame:
     """Ensure required columns exist; add if missing."""

@@ -51,7 +51,7 @@ class EventRepository:
             existing[event.uid] = event
             return pd.DataFrame([e.model_dump() for e in existing.values()])
 
-        self.storage.atomic_read_modify_write(EVENTS_FILE, modify)
+        self.storage.force_atomic_read_modify_write(EVENTS_FILE, modify)
 
     def bulk_upsert(self, events: Iterable[Event]) -> None:
         """Upsert multiple events."""
