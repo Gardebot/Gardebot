@@ -210,9 +210,11 @@ class VoteRepository:
         for poll_string in df.columns:
             event = self.events_repository.find_by_poll_string(poll_string)
             for index in df.index:
-                sapeur = self.sapeur_repository.find_by_name(index)
-                vote_value: Optional[bool] = df.at[index, poll_string]
-                list_vote.append(VoteRecord(event=event, sapeur=sapeur, value=vote_value))
+                all_sapeurs_name = [s.name for s in self.sapeur_repository.list_sapeurs()]
+                if index in all_sapeurs_name:
+                    sapeur = self.sapeur_repository.find_by_name(index)
+                    vote_value: Optional[bool] = df.at[index, poll_string]
+                    list_vote.append(VoteRecord(event=event, sapeur=sapeur, value=vote_value))
         return list_vote
 
     def upsert(self, vote: VoteRecord) -> None:
