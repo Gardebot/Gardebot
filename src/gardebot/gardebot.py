@@ -52,7 +52,7 @@ class Gardebot:
         try:
             assignments = self.onduty_service.process_assignments(eligible_events)
             for assignment in assignments:
-                # self.message_service.send_convocation(assignment=assignment)
+                self.message_service.send_convocation(assignment=assignment)
                 self.onduty_service.save_assignment(assignment)
                 LOGGER.info(
                     "onduty_assignment_completed",
@@ -92,6 +92,8 @@ class Gardebot:
         """Send reminders for all polls that need it."""
         event_list = self.event_service.list_events()
         for event in event_list:
+            if self.vote_service.test_headcount_reached(event):
+                continue
             if event.should_send_reminder() and not self.onduty_service.is_assigned(event):
                 try:
                     self.message_service.send_vote_reminder(event=event)
