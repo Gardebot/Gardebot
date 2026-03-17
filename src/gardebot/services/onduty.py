@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from typing import List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
@@ -145,9 +146,12 @@ class OnDutyService:
                 assignments.append(assignment)
                 continue
 
-            # Rank by historical score + batch count (lower = preferred)
+            # Rank by historical score + batch count (lower = preferred), random tiebreak
             present_names = [s.name for s in present_sapeurs]
-            combined_score = pd.Series({name: historical_scores.get(name, 0.0) + batch_counts.get(name, 0) for name in present_names})
+            combined_score = pd.Series(
+                {name: historical_scores.get(name, 0.0) + batch_counts.get(name, 0) + random.random() * 1e-6
+                 for name in present_names}
+            )
             selected_names = combined_score.sort_values().iloc[:n].index.tolist()
             selected_sapeurs = [s for s in present_sapeurs if s.name in selected_names]
 
@@ -195,7 +199,8 @@ class OnDutyService:
             vote_score = self._vote_score_pro_sapeur(event=event, sapeur_list=pending_sapeurs)
             combined_score = pd.Series(
                 {
-                    s.name: (vote_score.get(s.name, 0.0) + historical_scores.get(s.name, 0.0)) / 2 + batch_counts.get(s.name, 0)
+                    s.name: (vote_score.get(s.name, 0.0) + historical_scores.get(s.name, 0.0)) / 2
+                    + batch_counts.get(s.name, 0) + random.random() * 1e-6
                     for s in pending_sapeurs
                 }
             )
