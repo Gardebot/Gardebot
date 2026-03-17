@@ -9,7 +9,7 @@ import pandas as pd  # type: ignore[import-untyped]
 from gardebot.common.logging_configuration import get_logger
 from gardebot.config import EM_NAME, MAX_NB_REMINDER
 from gardebot.models.domain import Event, Sapeur, VoteRecord
-from gardebot.repositories import VoteRepository
+from gardebot.repositories import SapeurRepository, VoteRepository
 
 LOGGER = get_logger(__name__)
 
@@ -38,7 +38,9 @@ class VoteService:
     def list_non_responding(self, event: Event, include_em: bool = False) -> List[Sapeur]:
         """List users who have not responded."""
         have_voted = [v.sapeur.name for v in self.repo.list_by_poll(event) if v.value is not None]
-        all_voters = [v.sapeur for v in self.repo.list_by_poll(event)]
+        sap_repo = SapeurRepository()
+        tmp_all_voters = sap_repo.list_sapeurs()
+        all_voters = [sap for sap in tmp_all_voters if sap.joined_date <= event.published_date]
         non_responding = [n for n in all_voters if n.name not in have_voted]
         if not include_em:
             non_responding = [n for n in non_responding if n.name not in EM_NAME]
@@ -46,7 +48,7 @@ class VoteService:
 
     def test_headcount_reached(self, event: Event) -> bool:
         """Test if headcount is reached for an event."""
-        if len(self.list_present(event)) >= event.headcount:
+        if self.repo.count_present(event) >= event.headcount:
             LOGGER.info("Headcount reached for %s", event.poll_string)
             return True
         return False

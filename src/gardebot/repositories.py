@@ -228,7 +228,22 @@ class VoteRepository:
 
     def list_by_poll(self, evt: Event) -> List[VoteRecord]:
         """List votes for a single poll."""
-        return [v for v in self.list_votes() if v.event.poll_string == evt.poll_string]
+        df = self.storage.read_parquet(VOTES_FILE)
+        ser = df[evt.poll_string]
+        all_sapeurs = {s.name: s for s in self.sapeur_repository.list_sapeurs()}
+        list_vote = []
+        for index in ser.index:
+            if index in all_sapeurs:
+                vote_value: Optional[bool] = ser.at[index]
+                list_vote.append(VoteRecord(event=evt, sapeur=all_sapeurs[index], value=vote_value))
+        return list_vote
+
+    def count_present(self, evt: Event) -> int:
+        """Count how many sapeurs voted True for a poll (no model construction)."""
+        df = self.storage.read_parquet(VOTES_FILE)
+        if evt.poll_string not in df.columns:
+            return 0
+        return int(df[evt.poll_string].eq(True).sum())
 
     def get_vote_df(self, event_list: Optional[List[Event]] = None, sapeur_list: Optional[List[Sapeur]] = None) -> pd.DataFrame:
         """Return the vote DataFrame, optionally filtered by events and/or sapeurs."""
