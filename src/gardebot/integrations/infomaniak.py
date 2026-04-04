@@ -57,6 +57,14 @@ class InfomaniakCalendar:
             return None
         return date
 
+    def _get_ical_uid_from_event(self, event: Component) -> Optional[str]:
+        """Extracts the ICS UID from an event."""
+        uid = event.get("uid")
+        if not uid:
+            LOGGER.error("missing_event_ical_uid", summary=event.get("summary"))
+            return None
+        return str(uid)
+
     def clean_event(self, event: Component) -> Optional[Dict[str, Any]]:
         """Cleans an event from the calendar."""
         return {
@@ -65,6 +73,7 @@ class InfomaniakCalendar:
             "headcount": self._get_headcount_from_event(event),
             "start_date": self._get_date_from_event(event, "dtstart"),
             "end_date": self._get_date_from_event(event, "dtend"),
+            "ical_uid": self._get_ical_uid_from_event(event),
         }
 
     def fetch_calendar(self) -> pd.DataFrame:
@@ -89,7 +98,6 @@ class InfomaniakCalendar:
                     events_data.append(clean_event)
 
         df = pd.DataFrame(events_data)
-        df = self._handle_duplicate_names(df)
         df = self._remove_na_rows(df)
         LOGGER.debug("calendar_events_processed", count=len(df))
         return df

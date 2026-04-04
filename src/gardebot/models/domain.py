@@ -45,6 +45,7 @@ class Event(BaseModel):
     start_date: pd.Timestamp
     end_date: pd.Timestamp
     headcount: int
+    ical_uid: Optional[str] = None
     poll_uid: Optional[str] = None
     published_date: Optional[Union[pd.Timestamp, NaTType]] = None
     scheduled_publication_date: pd.Timestamp = pd.Timestamp(0)
@@ -62,7 +63,10 @@ class Event(BaseModel):
     @property
     def uid(self) -> str:
         """Generate a unique identifier for the event."""
-        base = f"{self.title}{self.location}{self.start_date}{self.end_date}"
+        if self.ical_uid:
+            base = f"{self.ical_uid}#{self.start_date.isoformat()}"
+        else:
+            base = f"{self.title}{self.location}{self.start_date}{self.end_date}"
         return hashlib.sha256(base.encode()).hexdigest()
 
     @computed_field  # type: ignore[misc]

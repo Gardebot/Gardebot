@@ -34,6 +34,7 @@ class EventService:
                 start_date=row["start_date"],
                 end_date=row["end_date"],
                 headcount=row["headcount"],
+                ical_uid=row.get("ical_uid"),
             )
             events.append(evt)
         events = self._propagate_publication_dates(events)
