@@ -22,13 +22,6 @@ from gardebot.config import EVENTS_FILE
 LOGGER = get_logger(__name__)
 
 
-def _score_row(row: pd.Series) -> tuple:  # type: ignore[type-arg]
-    """Return a sort key: prefer rows with poll_uid, then highest nb_reminder."""
-    has_poll_uid = 0 if (pd.isna(row.get("poll_uid")) or row.get("poll_uid") is None) else 1
-    nb_reminder = row.get("nb_reminder", 0) or 0
-    return (has_poll_uid, nb_reminder)
-
-
 def cleanup_duplicate_events(storage: Optional[FileStorage] = None) -> int:
     """Deduplicate events.parquet by (start_date, end_date, location).
 
@@ -56,7 +49,7 @@ def cleanup_duplicate_events(storage: Optional[FileStorage] = None) -> int:
 
     # Score each row: (has_poll_uid, nb_reminder)
     df = df.copy()
-    df["_score_poll"] = df.apply(lambda r: 0 if (pd.isna(r.get("poll_uid")) or r.get("poll_uid") is None) else 1, axis=1)
+    df["_score_poll"] = df["poll_uid"].notna().astype(int) if "poll_uid" in df.columns else 0
     df["_score_reminder"] = df.get("nb_reminder", pd.Series(0, index=df.index)).fillna(0).astype(int)
 
     # Sort so the best row comes last (we keep last within each group)

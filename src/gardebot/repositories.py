@@ -65,8 +65,8 @@ class EventRepository:
             legacy_index = {(str(e.start_date), str(e.end_date), e.location): e.uid for e in current_events}
             new_event_added = False
             for ev in events:
-                lk = (str(ev.start_date), str(ev.end_date), ev.location)
-                existing_uid = legacy_index.get(lk)
+                natural_key = (str(ev.start_date), str(ev.end_date), ev.location)
+                existing_uid = legacy_index.get(natural_key)
                 if existing_uid and existing_uid in current and ev.uid not in current:
                     # Migrate: replace old-keyed entry with new stable UID, preserving metadata
                     old_event = current.pop(existing_uid)
