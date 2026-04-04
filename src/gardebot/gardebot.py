@@ -42,8 +42,11 @@ class Gardebot:
 
     def assign_on_duty_for_events(self) -> None:
         """Assign on-duty personnel for events ready for assignment (batch, fair)."""
+        now = pd.Timestamp.now(tz="Europe/Zurich").tz_localize(None)
         event_list = [
-            event for event in self.event_service.list_events() if event.is_published() and not self.onduty_service.is_assigned(event)
+            event
+            for event in self.event_service.list_events()
+            if event.is_published() and not self.onduty_service.is_assigned(event) and event.start_date > now
         ]
         eligible_events = [event for event in event_list if self.vote_service.test_event_completion(event)]
         if not eligible_events:
@@ -91,7 +94,11 @@ class Gardebot:
     def reminders(self) -> None:
         """Send reminders for all polls that need it."""
         event_list = self.event_service.list_events()
+        now = pd.Timestamp.now(tz="Europe/Zurich").tz_localize(None)
         for event in event_list:
+            if event.start_date <= now:
+                LOGGER.debug("reminder_skipped_past_event", poll_string=event.poll_string, start_date=str(event.start_date))
+                continue
             if self.vote_service.test_headcount_reached(event):
                 continue
             if event.should_send_reminder() and not self.onduty_service.is_assigned(event):
