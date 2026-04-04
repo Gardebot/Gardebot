@@ -55,31 +55,58 @@ class EventRepository:
 
     def bulk_upsert(self, events: Iterable[Event]) -> None:
         """Upsert multiple events."""
+        from collections import defaultdict
 
         def modify(df: pd.DataFrame) -> pd.DataFrame:
             current_events = []
             if not df.empty:
                 current_events = [Event(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")]
             current = {e.uid: e for e in current_events}
-            # Build secondary index for legacy dedup: match on (start_date, end_date, location)
-            legacy_index = {(str(e.start_date), str(e.end_date), e.location): e.uid for e in current_events}
+
+            # Build secondary index: natural key -> list of uids (handles pre-existing duplicates)
+            legacy_index: defaultdict[tuple, list] = defaultdict(list)
+            for e in current_events:
+                natural_key = (str(e.start_date), str(e.end_date), e.location)
+                legacy_index[natural_key].append(e.uid)
+
             new_event_added = False
             for ev in events:
                 natural_key = (str(ev.start_date), str(ev.end_date), ev.location)
-                existing_uid = legacy_index.get(natural_key)
-                if existing_uid and existing_uid in current and ev.uid not in current:
-                    # Migrate: replace old-keyed entry with new stable UID, preserving metadata
-                    old_event = current.pop(existing_uid)
-                    current[ev.uid] = ev.model_copy(update={
-                        "poll_uid": old_event.poll_uid,
-                        "published_date": old_event.published_date,
-                        "nb_reminder": old_event.nb_reminder,
-                        "scheduled_publication_date": old_event.scheduled_publication_date,
-                    })
-                    new_event_added = True
-                elif ev.uid not in current:
-                    current[ev.uid] = ev
-                    new_event_added = True
+                existing_uids = legacy_index.get(natural_key, [])
+
+                if ev.uid in current:
+                    # Already exists with same UID, skip
+                    continue
+
+                if existing_uids:
+                    # Find the best old entry (most metadata) among all duplicates for this slot
+                    old_events = [current[uid] for uid in existing_uids if uid in current]
+                    if old_events:
+                        best_old = max(
+                            old_events,
+                            key=lambda e: (
+                                e.poll_uid is not None,
+                                e.published_date is not None and not pd.isna(e.published_date),
+                                e.nb_reminder or 0,
+                            ),
+                        )
+                        # Remove ALL old entries for this natural key (they are all duplicates)
+                        for uid in existing_uids:
+                            current.pop(uid, None)
+                        # Add new event with migrated metadata
+                        current[ev.uid] = ev.model_copy(update={
+                            "poll_uid": best_old.poll_uid,
+                            "published_date": best_old.published_date,
+                            "nb_reminder": best_old.nb_reminder,
+                            "scheduled_publication_date": best_old.scheduled_publication_date,
+                        })
+                        new_event_added = True
+                        continue
+
+                # Completely new event
+                current[ev.uid] = ev
+                new_event_added = True
+
             if new_event_added:
                 return pd.DataFrame([e.model_dump() for e in current.values()])
             else:
