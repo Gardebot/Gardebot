@@ -199,3 +199,143 @@ def test_bulk_upsert_legacy_migration_preserves_metadata() -> None:
     assert row["nb_reminder"] == 2, "nb_reminder should be preserved from legacy event"
     # The uid should now be the new stable uid
     assert row["uid"] == new_event.uid, "uid should be the new stable uid"
+
+
+def test_bulk_upsert_multiple_legacy_entries_same_natural_key() -> None:
+    """bulk_upsert must handle the case where multiple old events share the same natural key.
+
+    Both old events should be removed and only one new event (with the best metadata) kept.
+    """
+    from gardebot.repositories import EventRepository
+
+    start = pd.Timestamp("2026-04-04 19:00")
+    end = pd.Timestamp("2026-04-05 07:00")
+    location = "Veyrier"
+
+    # Two legacy events with the same time slot (the exact duplication scenario from 2026-04-04)
+    old_event_a = Event(
+        title="Piquet de Pâques 5",
+        location=location,
+        start_date=start,
+        end_date=end,
+        headcount=3,
+        poll_uid="poll-OLD-A",
+        nb_reminder=1,
+        published_date=pd.Timestamp("2026-03-12"),
+    )
+    old_event_b = Event(
+        title="Piquet de Pâques",
+        location=location,
+        start_date=start,
+        end_date=end,
+        headcount=3,
+        poll_uid="poll-OLD-B",
+        nb_reminder=0,
+    )
+
+    # The new stable event that should replace both
+    new_event = Event(
+        title="Piquet de Pâques",
+        location=location,
+        start_date=start,
+        end_date=end,
+        headcount=3,
+        ical_uid="d82bdf71-stable",
+    )
+
+    assert old_event_a.uid != new_event.uid
+    assert old_event_b.uid != new_event.uid
+    assert old_event_a.uid != old_event_b.uid
+
+    old_df = pd.DataFrame([old_event_a.model_dump(), old_event_b.model_dump()])
+
+    mock_storage = MagicMock()
+    captured = {}
+
+    def fake_force_atomic_rmw(filename, modifier_fn):
+        result = modifier_fn(old_df)
+        captured["result"] = result
+        return result
+
+    mock_storage.force_atomic_read_modify_write.side_effect = fake_force_atomic_rmw
+
+    repo = EventRepository(storage=mock_storage)
+    repo.bulk_upsert([new_event])
+
+    result_df = captured["result"]
+    assert len(result_df) == 1, f"Expected 1 row after dedup migration, got {len(result_df)}"
+    row = result_df.iloc[0]
+    # The best old event (old_event_a) had poll_uid + published_date + higher nb_reminder
+    assert row["poll_uid"] == "poll-OLD-A", "Should pick metadata from the best (most complete) old event"
+    assert row["nb_reminder"] == 1, "nb_reminder from best old event should be preserved"
+    assert row["uid"] == new_event.uid, "uid should be the new stable uid"
+
+
+def test_bulk_upsert_new_event_already_has_stable_uid_no_duplicate() -> None:
+    """If the new event's uid already exists in storage, it must not be duplicated."""
+    from gardebot.repositories import EventRepository
+
+    start = pd.Timestamp("2026-09-01 08:00")
+    end = pd.Timestamp("2026-09-02 08:00")
+
+    existing = Event(
+        title="Garde",
+        location="Caserne",
+        start_date=start,
+        end_date=end,
+        headcount=3,
+        ical_uid="abc-stable",
+        poll_uid="poll-xyz",
+        nb_reminder=1,
+    )
+    # Same event coming in again from the calendar
+    incoming = Event(
+        title="Garde",
+        location="Caserne",
+        start_date=start,
+        end_date=end,
+        headcount=3,
+        ical_uid="abc-stable",
+    )
+
+    assert existing.uid == incoming.uid, "Pre-condition: same ical_uid → same uid"
+
+    existing_df = pd.DataFrame([existing.model_dump()])
+    mock_storage = MagicMock()
+    captured = {}
+
+    def fake_force_atomic_rmw(filename, modifier_fn):
+        result = modifier_fn(existing_df)
+        captured["result"] = result
+        return result
+
+    mock_storage.force_atomic_read_modify_write.side_effect = fake_force_atomic_rmw
+
+    repo = EventRepository(storage=mock_storage)
+    repo.bulk_upsert([incoming])
+
+    # modifier returns the unchanged df when no new events
+    assert "result" not in captured or len(captured["result"]) == 1, "Should not duplicate an already-stored event"
+
+
+def test_cleanup_deduplicate_keeps_best_row() -> None:
+    """cleanup script deduplicate() must keep the row with the most metadata."""
+    from gardebot.scripts.cleanup_duplicate_events import deduplicate
+
+    start = pd.Timestamp("2026-04-04 19:00")
+    end = pd.Timestamp("2026-04-05 07:00")
+
+    e_no_meta = Event(title="Piquet 5", location="Veyrier", start_date=start, end_date=end, headcount=3)
+    e_with_ical = Event(
+        title="Piquet",
+        location="Veyrier",
+        start_date=start,
+        end_date=end,
+        headcount=3,
+        ical_uid="d82bdf71-stable",
+        poll_uid="poll-xyz",
+    )
+
+    result = deduplicate([e_no_meta, e_with_ical])
+    assert len(result) == 1
+    assert result[0].ical_uid == "d82bdf71-stable", "Should keep row with ical_uid"
