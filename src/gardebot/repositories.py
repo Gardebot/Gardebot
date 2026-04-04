@@ -61,9 +61,23 @@ class EventRepository:
             if not df.empty:
                 current_events = [Event(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")]
             current = {e.uid: e for e in current_events}
+            # Build secondary index for legacy dedup: match on (start_date, end_date, location)
+            legacy_index = {(str(e.start_date), str(e.end_date), e.location): e.uid for e in current_events}
             new_event_added = False
             for ev in events:
-                if ev.uid not in current:
+                lk = (str(ev.start_date), str(ev.end_date), ev.location)
+                existing_uid = legacy_index.get(lk)
+                if existing_uid and existing_uid in current and ev.uid not in current:
+                    # Migrate: replace old-keyed entry with new stable UID, preserving metadata
+                    old_event = current.pop(existing_uid)
+                    current[ev.uid] = ev.model_copy(update={
+                        "poll_uid": old_event.poll_uid,
+                        "published_date": old_event.published_date,
+                        "nb_reminder": old_event.nb_reminder,
+                        "scheduled_publication_date": old_event.scheduled_publication_date,
+                    })
+                    new_event_added = True
+                elif ev.uid not in current:
                     current[ev.uid] = ev
                     new_event_added = True
             if new_event_added:
@@ -72,7 +86,7 @@ class EventRepository:
                 LOGGER.info("no_new_events")
                 return df  # Return unchanged
 
-        self.storage.atomic_read_modify_write(EVENTS_FILE, modify)
+        self.storage.force_atomic_read_modify_write(EVENTS_FILE, modify)
 
     def find_by_uid(self, uid: str) -> Event:
         """Find an event by its UID."""
