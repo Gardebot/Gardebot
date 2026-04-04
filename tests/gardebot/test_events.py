@@ -162,7 +162,8 @@ class TestEventRepositoryBulkUpsert(unittest.TestCase):
         start = pd.Timestamp("2026-08-01 08:00")
         end = pd.Timestamp("2026-08-02 08:00")
 
-        old_event = Event(title="Garde 2", location="Caserne", start_date=start, end_date=end, headcount=3, poll_uid="poll-abc", nb_reminder=2)
+        published = pd.Timestamp("2026-07-20 09:00")
+        old_event = Event(title="Garde 2", location="Caserne", start_date=start, end_date=end, headcount=3, poll_uid="poll-abc", nb_reminder=2, published_date=published)
         new_event = Event(title="Garde", location="Caserne", start_date=start, end_date=end, headcount=3, ical_uid="server-uid-001")
 
         self.assertNotEqual(old_event.uid, new_event.uid, "Pre-condition: legacy and new UIDs differ")
@@ -180,6 +181,7 @@ class TestEventRepositoryBulkUpsert(unittest.TestCase):
         row = result_df.iloc[0]
         self.assertEqual(row["poll_uid"], "poll-abc", "poll_uid should be preserved from legacy event")
         self.assertEqual(row["nb_reminder"], 2, "nb_reminder should be preserved from legacy event")
+        self.assertEqual(row["published_date"], published, "published_date should be preserved from legacy event")
         self.assertEqual(row["uid"], new_event.uid, "uid should be the new stable uid")
 
     def test_bulk_upsert_multiple_legacy_entries_same_natural_key(self) -> None:
@@ -233,6 +235,7 @@ class TestEventRepositoryBulkUpsert(unittest.TestCase):
         row = result_df.iloc[0]
         self.assertEqual(row["poll_uid"], "poll-OLD-A", "Should pick metadata from the best (most complete) old event")
         self.assertEqual(row["nb_reminder"], 1, "nb_reminder from best old event should be preserved")
+        self.assertEqual(row["published_date"], pd.Timestamp("2026-03-12"), "published_date from best old event should be preserved")
         self.assertEqual(row["uid"], new_event.uid, "uid should be the new stable uid")
 
     def test_bulk_upsert_new_event_already_has_stable_uid_no_duplicate(self) -> None:
@@ -257,6 +260,55 @@ class TestEventRepositoryBulkUpsert(unittest.TestCase):
             "result" not in captured or len(captured["result"]) == 1,
             "Should not duplicate an already-stored event",
         )
+
+
+class TestPublicationGuard(unittest.TestCase):
+    """Verify that events with published_date set are not re-published."""
+
+    def test_migrated_event_with_published_date_is_not_republished(self) -> None:
+        """An event that already has published_date and poll_uid must not be published again."""
+        start = pd.Timestamp("2026-04-04 19:00")
+        end = pd.Timestamp("2026-04-05 07:00")
+        event = Event(
+            title="Piquet de Pâques",
+            location="Veyrier",
+            start_date=start,
+            end_date=end,
+            headcount=3,
+            ical_uid="d82bdf71-stable",
+            poll_uid="poll-OLD-A",
+            published_date=pd.Timestamp("2026-03-12"),
+        )
+        # is_published() must return True when both published_date and poll_uid are set
+        self.assertTrue(event.is_published(), "Event with published_date and poll_uid should be considered published")
+
+    def test_event_without_published_date_is_not_published(self) -> None:
+        """An event without published_date must not be considered published."""
+        start = pd.Timestamp("2026-04-04 19:00")
+        end = pd.Timestamp("2026-04-05 07:00")
+        event = Event(
+            title="Piquet de Pâques",
+            location="Veyrier",
+            start_date=start,
+            end_date=end,
+            headcount=3,
+            ical_uid="d82bdf71-stable",
+        )
+        self.assertFalse(event.is_published(), "Event without published_date should not be considered published")
+
+    def test_event_with_published_date_but_no_poll_uid_is_not_published(self) -> None:
+        """An event with published_date but no poll_uid must not be considered fully published."""
+        start = pd.Timestamp("2026-04-04 19:00")
+        end = pd.Timestamp("2026-04-05 07:00")
+        event = Event(
+            title="Piquet de Pâques",
+            location="Veyrier",
+            start_date=start,
+            end_date=end,
+            headcount=3,
+            published_date=pd.Timestamp("2026-03-12"),
+        )
+        self.assertFalse(event.is_published(), "Event with published_date but no poll_uid should not be considered published")
 
 
 class TestCleanupScript(unittest.TestCase):
