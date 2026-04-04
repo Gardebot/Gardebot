@@ -17,7 +17,14 @@ LOGGER = get_logger(__name__)
 
 
 def _clean_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Replace float NaN values with None so Pydantic validators receive None for optional fields."""
+    """Replace float NaN values with None so Pydantic validators receive None for optional fields.
+
+    In pandas 3.x, a column containing a mix of None and string values uses the
+    ``str`` dtype, where None is stored as ``float('nan')``.  When that value is
+    passed to a Pydantic ``Optional[str]`` field it triggers a validation error.
+    This helper converts those float NaN values back to ``None`` before the dict
+    is unpacked into a model constructor.
+    """
     return {str(k): (None if isinstance(v, float) and math.isnan(v) else v) for k, v in row.items()}
 
 

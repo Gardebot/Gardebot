@@ -221,7 +221,7 @@ class TestRemindersSkipPastEvents(unittest.TestCase):
     def test_reminders_skip_past_events(self) -> None:
         from gardebot.gardebot import Gardebot
 
-        past_start = pd.Timestamp.now() - pd.Timedelta(days=1)
+        past_start = pd.Timestamp.now(tz="Europe/Zurich").tz_localize(None) - pd.Timedelta(days=1)
         past_end = past_start + pd.Timedelta(hours=12)
         past_event = Event(
             title="Garde passée",
@@ -229,7 +229,7 @@ class TestRemindersSkipPastEvents(unittest.TestCase):
             start_date=past_start,
             end_date=past_end,
             headcount=3,
-            published_date=pd.Timestamp.now() - pd.Timedelta(days=30),
+            published_date=pd.Timestamp.now(tz="Europe/Zurich").tz_localize(None) - pd.Timedelta(days=30),
             nb_reminder=1,
         )
 
@@ -259,7 +259,7 @@ class TestAssignmentsSkipPastEvents(unittest.TestCase):
     def test_assignments_skip_past_events(self) -> None:
         from gardebot.gardebot import Gardebot
 
-        past_start = pd.Timestamp.now() - pd.Timedelta(hours=2)
+        past_start = pd.Timestamp.now(tz="Europe/Zurich").tz_localize(None) - pd.Timedelta(hours=2)
         past_end = past_start + pd.Timedelta(hours=12)
         past_event = Event(
             title="Garde passée",
@@ -268,7 +268,7 @@ class TestAssignmentsSkipPastEvents(unittest.TestCase):
             end_date=past_end,
             headcount=3,
             poll_uid="poll-x",
-            published_date=pd.Timestamp.now() - pd.Timedelta(days=5),
+            published_date=pd.Timestamp.now(tz="Europe/Zurich").tz_localize(None) - pd.Timedelta(days=5),
         )
 
         bot = Gardebot.__new__(Gardebot)
@@ -297,7 +297,7 @@ class TestShouldBePublishedRejectsPastEvents(unittest.TestCase):
     def test_should_be_published_rejects_past_events(self) -> None:
         from gardebot.adapters.polling import PollingAdapter
 
-        past_start = pd.Timestamp.now() - pd.Timedelta(days=1)
+        past_start = pd.Timestamp.now(tz="Europe/Zurich").tz_localize(None) - pd.Timedelta(days=1)
         past_end = past_start + pd.Timedelta(hours=12)
         event = Event(
             title="Garde passée",
