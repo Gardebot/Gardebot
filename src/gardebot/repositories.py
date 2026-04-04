@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+import math
+from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -13,6 +14,11 @@ from gardebot.errors import NotFoundError
 from gardebot.models.domain import Event, OnDutyAssignment, Sapeur, VoteRecord
 
 LOGGER = get_logger(__name__)
+
+
+def _clean_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Replace float NaN values with None so Pydantic validators receive None for optional fields."""
+    return {str(k): (None if isinstance(v, float) and math.isnan(v) else v) for k, v in row.items()}
 
 
 class EventRepository:
@@ -37,7 +43,7 @@ class EventRepository:
             LOGGER.debug("events_empty")
             return []
         return [
-            Event(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")
+            Event(**_clean_row(row)) for row in df.to_dict(orient="records")
         ]  # TODO: deal with possibility new fields in Event which are not in df
 
     def upsert_event(self, event: Event) -> None:
@@ -46,7 +52,7 @@ class EventRepository:
         def modify(df: pd.DataFrame) -> pd.DataFrame:
             events = []
             if not df.empty:
-                events = [Event(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")]
+                events = [Event(**_clean_row(row)) for row in df.to_dict(orient="records")]
             existing = {e.uid: e for e in events}
             existing[event.uid] = event
             return pd.DataFrame([e.model_dump() for e in existing.values()])
@@ -55,63 +61,110 @@ class EventRepository:
 
     def bulk_upsert(self, events: Iterable[Event]) -> None:
         """Upsert multiple events."""
+        import re
         from collections import defaultdict
+
+        def _base_name(title: str) -> str:
+            return re.sub(r"\s+\d+$", "", title).strip()
+
+        def _score(e: Event) -> tuple:
+            return (
+                e.ical_uid is not None,
+                e.poll_uid is not None,
+                e.published_date is not None and not pd.isna(e.published_date),
+                e.nb_reminder or 0,
+            )
 
         def modify(df: pd.DataFrame) -> pd.DataFrame:
             current_events = []
             if not df.empty:
-                current_events = [Event(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")]
+                current_events = [Event(**_clean_row(row)) for row in df.to_dict(orient="records")]
             current = {e.uid: e for e in current_events}
+            changed = False
 
-            # Build secondary index: natural key -> list of uids (handles pre-existing duplicates)
-            legacy_index: defaultdict[tuple, list] = defaultdict(list)
+            # ══════════ PHASE 0: Deduplicate existing rows ══════════
+            nk_groups: defaultdict[tuple, list[str]] = defaultdict(list)
             for e in current_events:
-                natural_key = (str(e.start_date), str(e.end_date), e.location)
-                legacy_index[natural_key].append(e.uid)
+                nk = (str(e.start_date), str(e.end_date), e.location, _base_name(e.title))
+                nk_groups[nk].append(e.uid)
 
-            new_event_added = False
-            for ev in events:
-                natural_key = (str(ev.start_date), str(ev.end_date), ev.location)
-                existing_uids = legacy_index.get(natural_key, [])
-
-                if ev.uid in current:
-                    # Already exists with same UID, skip
+            for nk, uids in nk_groups.items():
+                if len(uids) <= 1:
                     continue
+                group = [current[u] for u in uids if u in current]
+                if len(group) <= 1:
+                    continue
+                best = max(group, key=_score)
+                for other in group:
+                    if other.uid == best.uid:
+                        continue
+                    updates = {}
+                    if not best.poll_uid and other.poll_uid:
+                        updates["poll_uid"] = other.poll_uid
+                    if (best.published_date is None or pd.isna(best.published_date)) and (
+                        other.published_date is not None and not pd.isna(other.published_date)
+                    ):
+                        updates["published_date"] = other.published_date
+                    if (best.nb_reminder or 0) < (other.nb_reminder or 0):
+                        updates["nb_reminder"] = other.nb_reminder
+                    if updates:
+                        best = best.model_copy(update=updates)
+                    current.pop(other.uid, None)
+                    changed = True
+                current[best.uid] = best
 
-                if existing_uids:
-                    # Find the best old entry (most metadata) among all duplicates for this slot
-                    old_events = [current[uid] for uid in existing_uids if uid in current]
-                    if old_events:
-                        best_old = max(
-                            old_events,
-                            key=lambda e: (
-                                e.poll_uid is not None,
-                                e.published_date is not None and not pd.isna(e.published_date),
-                                e.nb_reminder or 0,
-                            ),
-                        )
-                        # Remove ALL old entries for this natural key (they are all duplicates)
-                        for uid in existing_uids:
-                            current.pop(uid, None)
-                        # Add new event with migrated metadata
+            # Rebuild index after Phase 0 dedup
+            legacy_index: defaultdict[tuple, list[str]] = defaultdict(list)
+            for e in current.values():
+                nk = (str(e.start_date), str(e.end_date), e.location, _base_name(e.title))
+                legacy_index[nk].append(e.uid)
+
+            # ══════════ PHASE 1: Process incoming events ══════════
+            for ev in events:
+                nk = (str(ev.start_date), str(ev.end_date), ev.location, _base_name(ev.title))
+                existing_uids = legacy_index.get(nk, [])
+
+                stale_uids = [uid for uid in existing_uids if uid != ev.uid and uid in current]
+                if stale_uids:
+                    stale_events = [current[uid] for uid in stale_uids]
+                    best_stale = max(stale_events, key=_score)
+                    for uid in stale_uids:
+                        current.pop(uid, None)
+                    changed = True
+
+                    if ev.uid in current:
+                        canonical = current[ev.uid]
+                        updates = {}
+                        if not canonical.poll_uid and best_stale.poll_uid:
+                            updates["poll_uid"] = best_stale.poll_uid
+                        if (canonical.published_date is None or pd.isna(canonical.published_date)) and (
+                            best_stale.published_date is not None and not pd.isna(best_stale.published_date)
+                        ):
+                            updates["published_date"] = best_stale.published_date
+                        if (canonical.nb_reminder or 0) < (best_stale.nb_reminder or 0):
+                            updates["nb_reminder"] = best_stale.nb_reminder
+                        if updates:
+                            current[ev.uid] = canonical.model_copy(update=updates)
+                        continue
+                    else:
                         current[ev.uid] = ev.model_copy(update={
-                            "poll_uid": best_old.poll_uid,
-                            "published_date": best_old.published_date,
-                            "nb_reminder": best_old.nb_reminder,
-                            "scheduled_publication_date": best_old.scheduled_publication_date,
+                            "poll_uid": best_stale.poll_uid,
+                            "published_date": best_stale.published_date,
+                            "nb_reminder": best_stale.nb_reminder,
+                            "scheduled_publication_date": best_stale.scheduled_publication_date,
                         })
-                        new_event_added = True
                         continue
 
-                # Completely new event
-                current[ev.uid] = ev
-                new_event_added = True
+                if ev.uid in current:
+                    continue
 
-            if new_event_added:
+                current[ev.uid] = ev
+                changed = True
+
+            if changed:
                 return pd.DataFrame([e.model_dump() for e in current.values()])
-            else:
-                LOGGER.info("no_new_events")
-                return df  # Return unchanged
+            LOGGER.info("no_new_events")
+            return df
 
         self.storage.force_atomic_read_modify_write(EVENTS_FILE, modify)
 

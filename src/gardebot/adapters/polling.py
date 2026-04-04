@@ -144,8 +144,11 @@ class PollingAdapter(WahaClient):
         if event.is_published():
             LOGGER.debug("event_already_published", poll_string=event.poll_string)
             return False
-        today = pd.Timestamp.now(tz=GENEVA_TZ).date()
-        if event.scheduled_publication_date.date() > today:
+        today = pd.Timestamp.now(tz=GENEVA_TZ)
+        if event.start_date <= today.tz_localize(None):
+            LOGGER.debug("event_already_past", poll_string=event.poll_string)
+            return False
+        if event.scheduled_publication_date.date() > today.date():
             LOGGER.debug("event_not_due_yet", poll_string=event.poll_string)
             return False
         if self._onduty_service.is_assigned(event=event):  # TODO: change to is_published() when separation is done
