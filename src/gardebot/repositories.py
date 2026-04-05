@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Iterable, List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
@@ -13,6 +14,32 @@ from gardebot.errors import NotFoundError
 from gardebot.models.domain import Event, OnDutyAssignment, Sapeur, VoteRecord
 
 LOGGER = get_logger(__name__)
+
+
+def _base_name(title: str) -> str:
+    """Strip trailing numeric suffix: 'Piquet de Pâques 5' → 'Piquet de Pâques'."""
+    return re.sub(r"\s+\d+$", "", title).strip()
+
+
+def _clean_record(row: dict) -> dict:
+    """Convert float NaN values (from mixed-type DataFrame columns) to None."""
+    return {k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in row.items()}
+
+
+def _find_matching_column(df: pd.DataFrame, event: Event) -> Optional[str]:
+    """Find a column whose date+location suffix matches the event's poll_string suffix.
+
+    Matches on everything after ' : ' in the poll_string (the date and location part),
+    so 'Piquet de Pâques 5 : samedi 4 avril...' and 'Piquet de Pâques : samedi 4 avril...'
+    are considered matching.
+    """
+    if " : " not in event.poll_string:
+        return None
+    event_suffix = event.poll_string.split(" : ", 1)[1]
+    for col in df.columns:
+        if " : " in col and col.split(" : ", 1)[1] == event_suffix:
+            return col
+    return None
 
 
 class EventRepository:
@@ -37,7 +64,7 @@ class EventRepository:
             LOGGER.debug("events_empty")
             return []
         return [
-            Event(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")
+            Event(**_clean_record(row)) for row in df.to_dict(orient="records")
         ]  # TODO: deal with possibility new fields in Event which are not in df
 
     def upsert_event(self, event: Event) -> None:
@@ -46,7 +73,7 @@ class EventRepository:
         def modify(df: pd.DataFrame) -> pd.DataFrame:
             events = []
             if not df.empty:
-                events = [Event(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")]
+                events = [Event(**_clean_record(row)) for row in df.to_dict(orient="records")]
             existing = {e.uid: e for e in events}
             existing[event.uid] = event
             return pd.DataFrame([e.model_dump() for e in existing.values()])
@@ -60,12 +87,36 @@ class EventRepository:
         def modify(df: pd.DataFrame) -> pd.DataFrame:
             current_events = []
             if not df.empty:
-                current_events = [Event(**{str(k): v for k, v in row.items()}) for row in df.to_dict(orient="records")]
+                current_events = [Event(**_clean_record(row)) for row in df.to_dict(orient="records")]
             current = {e.uid: e for e in current_events}
+
+            # Phase 0: Deduplicate existing rows by natural key (base name + start/end/location)
+            # Group existing events by (base_title, start, end, location) and keep the best one
+            phase0_groups: defaultdict[tuple, list] = defaultdict(list)
+            for e in current_events:
+                nk = (str(e.start_date), str(e.end_date), e.location, _base_name(e.title))
+                phase0_groups[nk].append(e)
+            phase0_changed = False
+            for nk, group in phase0_groups.items():
+                if len(group) > 1:
+                    best = max(
+                        group,
+                        key=lambda e: (
+                            e.ical_uid is not None,
+                            e.poll_uid is not None,
+                            e.published_date is not None and not pd.isna(e.published_date),
+                            e.nb_reminder or 0,
+                        ),
+                    )
+                    for e in group:
+                        if e.uid != best.uid:
+                            LOGGER.info("phase0_dedup_remove", uid=e.uid, title=e.title, kept_uid=best.uid)
+                            current.pop(e.uid, None)
+                            phase0_changed = True
 
             # Build secondary index: natural key -> list of uids (handles pre-existing duplicates)
             legacy_index: defaultdict[tuple, list] = defaultdict(list)
-            for e in current_events:
+            for e in current.values():
                 natural_key = (str(e.start_date), str(e.end_date), e.location)
                 legacy_index[natural_key].append(e.uid)
 
@@ -107,7 +158,7 @@ class EventRepository:
                 current[ev.uid] = ev
                 new_event_added = True
 
-            if new_event_added:
+            if new_event_added or phase0_changed:
                 return pd.DataFrame([e.model_dump() for e in current.values()])
             else:
                 LOGGER.info("no_new_events")
@@ -270,7 +321,14 @@ class VoteRepository:
     def list_by_poll(self, evt: Event) -> List[VoteRecord]:
         """List votes for a single poll."""
         df = self.storage.read_parquet(VOTES_FILE)
-        ser = df[evt.poll_string]
+        col = evt.poll_string
+        if col not in df.columns:
+            matched = _find_matching_column(df, evt)
+            if matched:
+                col = matched
+            else:
+                return []
+        ser = df[col]
         all_sapeurs = {s.name: s for s in self.sapeur_repository.list_sapeurs()}
         list_vote = []
         for index in ser.index:
@@ -282,9 +340,12 @@ class VoteRepository:
     def count_present(self, evt: Event) -> int:
         """Count how many sapeurs voted True for a poll (no model construction)."""
         df = self.storage.read_parquet(VOTES_FILE)
-        if evt.poll_string not in df.columns:
+        col = evt.poll_string
+        if col not in df.columns:
+            col = _find_matching_column(df, evt)
+        if col is None or col not in df.columns:
             return 0
-        return int(df[evt.poll_string].eq(True).sum())
+        return int(df[col].eq(True).sum())
 
     def get_vote_df(self, event_list: Optional[List[Event]] = None, sapeur_list: Optional[List[Sapeur]] = None) -> pd.DataFrame:
         """Return the vote DataFrame, optionally filtered by events and/or sapeurs."""
@@ -354,9 +415,14 @@ class OnDutyRepository:
     def is_assigned(self, event: Event) -> bool:
         """Return True if headcount requirement is satisfied for the poll."""
         df = self.storage.read_parquet(ONDUTY_FILE)
-        if df.empty or event.poll_string not in df.columns:
+        if df.empty:
             return False
-        assigned_names = df.index[df[event.poll_string].eq(True)].tolist()
+        col = event.poll_string
+        if col not in df.columns:
+            col = _find_matching_column(df, event)
+        if col is None or col not in df.columns:
+            return False
+        assigned_names = df.index[df[col].eq(True)].tolist()
         return len(assigned_names) >= event.headcount
 
     def get_onduty_df(self, event_list: Optional[List[Event]] = None, sapeur_list: Optional[List[Sapeur]] = None) -> pd.DataFrame:
