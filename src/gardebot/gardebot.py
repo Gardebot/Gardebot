@@ -98,9 +98,11 @@ class Gardebot:
         for event in event_list:
             if event.start_date <= now:
                 continue  # Never send reminders for past events
+            if self.onduty_service.is_assigned(event):
+                continue  # Already fully assigned — no reminder needed
             if self.vote_service.test_headcount_reached(event):
                 continue
-            if event.should_send_reminder() and not self.onduty_service.is_assigned(event):
+            if event.should_send_reminder():
                 try:
                     self.message_service.send_vote_reminder(event=event)
                     update_evt = self.event_service.increment_reminder(event)

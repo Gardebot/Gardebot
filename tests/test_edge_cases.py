@@ -544,5 +544,259 @@ class TestMigratePollStrings(unittest.TestCase):
         self.assertNotEqual(suffix_2, base_poll)
 
 
+# ---------------------------------------------------------------------------
+# 10. _find_all_matching_columns — multiple generations
+# ---------------------------------------------------------------------------
+
+class TestFindAllMatchingColumns(unittest.TestCase):
+    """_find_all_matching_columns returns every column sharing the date+location suffix."""
+
+    def test_returns_all_matching_columns(self) -> None:
+        """All three historical column generations are returned."""
+        from gardebot.repositories import _find_all_matching_columns
+
+        event = _make_event(title="Piquet de Pâques", start_offset_days=5, headcount=2)
+        suffix = event.poll_string.split(" : ", 1)[1]
+        old5 = f"Piquet de Pâques 5 : {suffix}"
+        old7 = f"Piquet de Pâques 7 : {suffix}"
+        current = event.poll_string
+
+        df = pd.DataFrame({old5: [True], old7: [False], current: [None], "Unrelated : other date, place": [True]})
+        matches = _find_all_matching_columns(df, event)
+        self.assertIn(old5, matches)
+        self.assertIn(old7, matches)
+        self.assertIn(current, matches)
+        self.assertNotIn("Unrelated : other date, place", matches)
+
+    def test_returns_empty_when_no_match(self) -> None:
+        from gardebot.repositories import _find_all_matching_columns
+
+        event = _make_event(title="Unknown", start_offset_days=5, headcount=2)
+        df = pd.DataFrame({"Other Event : some date, place": [True]})
+        self.assertEqual(_find_all_matching_columns(df, event), [])
+
+    def test_returns_empty_when_poll_string_has_no_separator(self) -> None:
+        from gardebot.repositories import _find_all_matching_columns
+        from gardebot.models.domain import Event as _Event
+
+        start = pd.Timestamp.now() + pd.Timedelta(days=3)
+        end = start + pd.Timedelta(hours=12)
+        # Build event with no location so poll_string has no ' : '
+        evt = _Event(title="NoSep", location="", start_date=start, end_date=end, headcount=1)
+        df = pd.DataFrame({"NoSep : ": [True]})
+        # poll_string without ' : ' should return []
+        if " : " not in evt.poll_string:
+            self.assertEqual(_find_all_matching_columns(df, evt), [])
+
+
+# ---------------------------------------------------------------------------
+# 11. count_present() aggregates across multiple fragmented columns
+# ---------------------------------------------------------------------------
+
+class TestCountPresentMultiColumn(unittest.TestCase):
+    """count_present() must OR-aggregate across all historical column generations."""
+
+    def _make_vote_repo(self, df: pd.DataFrame) -> "VoteRepository":
+        from gardebot.repositories import VoteRepository
+        repo = VoteRepository.__new__(VoteRepository)
+        repo.storage = _make_mock_storage(df)
+        repo.sapeur_repository = MagicMock()
+        repo.events_repository = MagicMock()
+        return repo
+
+    def test_count_present_multi_column_aggregation(self) -> None:
+        """Votes spread across three old columns are OR-aggregated correctly."""
+        event = _make_event(title="Piquet de Pâques", start_offset_days=5, headcount=2)
+        suffix = event.poll_string.split(" : ", 1)[1]
+        old5 = f"Piquet de Pâques 5 : {suffix}"
+        old7 = f"Piquet de Pâques 7 : {suffix}"
+        current = event.poll_string
+
+        # Alice voted True in old5; Bob voted True in old7; Charlie only in current
+        df = pd.DataFrame(
+            {
+                old5:    [True,  None,  None],
+                old7:    [None,  True,  None],
+                current: [None,  None,  True],
+            },
+            index=["Alice", "Bob", "Charlie"],
+        )
+        repo = self._make_vote_repo(df)
+        self.assertEqual(repo.count_present(event), 3)
+
+    def test_count_present_true_wins_over_false(self) -> None:
+        """If a sapeur voted True in any generation, they count as present."""
+        event = _make_event(title="Piquet de Pâques", start_offset_days=5, headcount=2)
+        suffix = event.poll_string.split(" : ", 1)[1]
+        old_col = f"Piquet de Pâques 5 : {suffix}"
+        current = event.poll_string
+
+        # Alice: True in old, False in current → should be True
+        df = pd.DataFrame(
+            {old_col: [True, False], current: [False, True]},
+            index=["Alice", "Bob"],
+        )
+        repo = self._make_vote_repo(df)
+        self.assertEqual(repo.count_present(event), 2)
+
+    def test_count_present_nan_treated_as_no_vote(self) -> None:
+        """NaN in all generations for a sapeur → not counted."""
+        event = _make_event(title="Piquet de Pâques", start_offset_days=5, headcount=2)
+        suffix = event.poll_string.split(" : ", 1)[1]
+        old_col = f"Piquet de Pâques 5 : {suffix}"
+        current = event.poll_string
+
+        df = pd.DataFrame(
+            {old_col: [None, True], current: [None, None]},
+            index=["Alice", "Bob"],
+        )
+        repo = self._make_vote_repo(df)
+        self.assertEqual(repo.count_present(event), 1)  # Only Bob (True in old_col)
+
+
+# ---------------------------------------------------------------------------
+# 12. reminders() skips already-assigned events
+# ---------------------------------------------------------------------------
+
+class TestRemindersSkipAssignedEvents(unittest.TestCase):
+    """reminders() must skip events that are already fully assigned."""
+
+    def test_reminders_skips_assigned_event(self) -> None:
+        """An already-assigned event must not trigger a reminder."""
+        from gardebot.gardebot import Gardebot
+
+        future_event = _make_event(
+            title="Piquet de Pâques",
+            start_offset_days=2,
+            published_date=pd.Timestamp.now() - pd.Timedelta(hours=30),
+            nb_reminder=0,
+            poll_uid="poll-assigned",
+        )
+
+        gb = Gardebot.__new__(Gardebot)
+        gb.event_service = MagicMock()
+        gb.event_service.list_events.return_value = [future_event]
+        gb.vote_service = MagicMock()
+        gb.vote_service.test_headcount_reached.return_value = False  # Would fail without is_assigned guard
+        gb.onduty_service = MagicMock()
+        gb.onduty_service.is_assigned.return_value = True  # Event IS assigned
+        gb.message_service = MagicMock()
+
+        gb.reminders()
+
+        # is_assigned() guard must prevent reminder from being sent
+        gb.message_service.send_vote_reminder.assert_not_called()
+        # is_assigned() must be called BEFORE test_headcount_reached()
+        gb.onduty_service.is_assigned.assert_called_once_with(future_event)
+        gb.vote_service.test_headcount_reached.assert_not_called()
+
+    def test_reminders_is_assigned_checked_before_headcount(self) -> None:
+        """is_assigned() must short-circuit before test_headcount_reached() is evaluated."""
+        from gardebot.gardebot import Gardebot
+
+        future_event = _make_event(
+            title="Garde",
+            start_offset_days=3,
+            published_date=pd.Timestamp.now() - pd.Timedelta(hours=30),
+            nb_reminder=0,
+            poll_uid="poll-guard",
+        )
+
+        call_order: list = []
+
+        gb = Gardebot.__new__(Gardebot)
+        gb.event_service = MagicMock()
+        gb.event_service.list_events.return_value = [future_event]
+        gb.vote_service = MagicMock()
+        gb.vote_service.test_headcount_reached.side_effect = lambda e: call_order.append("headcount") or False
+        gb.onduty_service = MagicMock()
+        gb.onduty_service.is_assigned.side_effect = lambda e: call_order.append("is_assigned") or True
+        gb.message_service = MagicMock()
+
+        gb.reminders()
+
+        self.assertIn("is_assigned", call_order)
+        # headcount must NOT be called (is_assigned returned True → early continue)
+        self.assertNotIn("headcount", call_order)
+
+
+# ---------------------------------------------------------------------------
+# 13. migrate_votes_poll_strings — new migration script
+# ---------------------------------------------------------------------------
+
+class TestMigrateVotesPollStrings(unittest.TestCase):
+    """Tests for scripts/migrate_votes_poll_strings.py."""
+
+    def test_migrate_merges_all_generations_with_or_priority(self) -> None:
+        """Three old columns are merged into the current poll_string with True > False > NaN."""
+        from gardebot.scripts.migrate_votes_poll_strings import migrate_votes_dataframe
+
+        event = _make_event(title="Piquet de Pâques", start_offset_days=10, headcount=2)
+        suffix = event.poll_string.split(" : ", 1)[1]
+        old5 = f"Piquet de Pâques 5 : {suffix}"
+        old7 = f"Piquet de Pâques 7 : {suffix}"
+        current = event.poll_string
+
+        df = pd.DataFrame(
+            {old5: [True, None, False], old7: [None, True, False], current: [None, None, None]},
+            index=["Alice", "Bob", "Charlie"],
+        )
+        result = migrate_votes_dataframe(df, [event])
+
+        # Old columns gone, current column kept
+        self.assertNotIn(old5, result.columns)
+        self.assertNotIn(old7, result.columns)
+        self.assertIn(current, result.columns)
+
+        # Alice True in old5 → True
+        self.assertTrue(result.at["Alice", current])
+        # Bob True in old7 → True
+        self.assertTrue(result.at["Bob", current])
+        # Charlie False in both old → False (NaN in current → False wins over NaN)
+        self.assertFalse(result.at["Charlie", current])
+
+    def test_migrate_unchanged_when_only_current_column_exists(self) -> None:
+        """If only the current poll_string column exists, df is returned unchanged."""
+        from gardebot.scripts.migrate_votes_poll_strings import migrate_votes_dataframe
+
+        event = _make_event(title="Garde", start_offset_days=5, headcount=2)
+        current = event.poll_string
+        df = pd.DataFrame({current: [True, False]}, index=["Alice", "Bob"])
+        result = migrate_votes_dataframe(df, [event])
+        self.assertIs(result, df)
+
+    def test_migrate_handles_event_with_no_matching_column(self) -> None:
+        """Event with no column in votes.parquet is silently skipped."""
+        from gardebot.scripts.migrate_votes_poll_strings import migrate_votes_dataframe
+
+        event = _make_event(title="Missing Event", start_offset_days=5, headcount=2)
+        df = pd.DataFrame({"Unrelated : some date, place": [True]}, index=["Alice"])
+        result = migrate_votes_dataframe(df, [event])
+        # Should return original df unchanged
+        self.assertIs(result, df)
+
+    def test_migrate_empty_df_returns_empty(self) -> None:
+        """Empty DataFrame is returned unchanged."""
+        from gardebot.scripts.migrate_votes_poll_strings import migrate_votes_dataframe
+
+        df = pd.DataFrame()
+        event = _make_event(title="Garde", start_offset_days=5)
+        result = migrate_votes_dataframe(df, [event])
+        self.assertIs(result, df)
+
+    def test_merge_bool_series_priority(self) -> None:
+        """_merge_bool_series: True > False > NaN."""
+        from gardebot.scripts.migrate_votes_poll_strings import _merge_bool_series
+
+        s1 = pd.Series([True, None, False, None], index=["a", "b", "c", "d"])
+        s2 = pd.Series([False, True, False, None], index=["a", "b", "c", "d"])
+        merged = _merge_bool_series([s1, s2])
+
+        self.assertTrue(merged["a"])   # True wins over False
+        self.assertTrue(merged["b"])   # True wins over None
+        self.assertFalse(merged["c"])  # False in both → False
+        self.assertTrue(pd.isna(merged["d"]))  # None in both → NaN
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -23,6 +23,15 @@ from gardebot.models.domain import Event
 LOGGER = get_logger(__name__)
 
 
+def _or_merge_bool(a: object, b: object) -> object:
+    """OR-merge two nullable boolean values: True > False > NaN."""
+    if pd.notna(a) and bool(a):
+        return True
+    if pd.notna(b) and bool(b):
+        return True
+    return a if pd.notna(a) else b
+
+
 def _date_location_suffix(poll_string: str) -> Optional[str]:
     """Return the date+location part (everything after ' : ') of a poll_string, or None."""
     if " : " not in poll_string:
@@ -78,7 +87,7 @@ def migrate_dataframe(df: pd.DataFrame, rename_map: Dict[str, str], current_poll
                 existing = result[new_col]
                 incoming = result[old_col]
                 # OR merge: True wins over False/None; non-null wins over null
-                merged = existing.combine(incoming, lambda a, b: a if a is True else (b if b is True else (a if pd.notna(a) else b)))
+                merged = existing.combine(incoming, _or_merge_bool)
                 result[new_col] = merged
                 LOGGER.info("migrate_merge_column", old_col=old_col, new_col=new_col)
                 result = result.drop(columns=[old_col])
@@ -92,7 +101,7 @@ def migrate_dataframe(df: pd.DataFrame, rename_map: Dict[str, str], current_poll
             for old_col in old_cols[1:]:
                 existing = result[base_col]
                 incoming = result[old_col]
-                merged = existing.combine(incoming, lambda a, b: a if a is True else (b if b is True else (a if pd.notna(a) else b)))
+                merged = existing.combine(incoming, _or_merge_bool)
                 result[base_col] = merged
                 LOGGER.info("migrate_merge_column", old_col=old_col, new_col=new_col)
                 result = result.drop(columns=[old_col])

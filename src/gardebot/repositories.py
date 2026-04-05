@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable, List, Optional
+from typing import Any, Iterable, List, Optional
 
 import pandas as pd  # type: ignore[import-untyped]
 
@@ -33,13 +33,34 @@ def _find_matching_column(df: pd.DataFrame, event: Event) -> Optional[str]:
     so 'Piquet de Pâques 5 : samedi 4 avril...' and 'Piquet de Pâques : samedi 4 avril...'
     are considered matching.
     """
+    matches = _find_all_matching_columns(df, event)
+    return matches[0] if matches else None
+
+
+def _find_all_matching_columns(df: pd.DataFrame, event: Event) -> List[str]:
+    """Find ALL columns whose date+location suffix matches the event's poll_string suffix.
+
+    Returns every column (across all historical title generations) that shares the same
+    date+location part after ' : '.  For example, 'Piquet de Pâques 5 : samedi 4 avril...',
+    'Piquet de Pâques 7 : samedi 4 avril...', and 'Piquet de Pâques : samedi 4 avril...'
+    are all returned when the current event's poll_string ends with 'samedi 4 avril...'.
+    """
     if " : " not in event.poll_string:
-        return None
+        return []
     event_suffix = event.poll_string.split(" : ", 1)[1]
-    for col in df.columns:
-        if " : " in col and col.split(" : ", 1)[1] == event_suffix:
-            return col
-    return None
+    return [col for col in df.columns if " : " in col and col.split(" : ", 1)[1] == event_suffix]
+
+
+def _or_merge_bool(a: Any, b: Any) -> Any:
+    """OR-merge two nullable boolean values: True > False > NaN.
+
+    Uses bool() conversion to handle numpy booleans correctly.
+    """
+    if pd.notna(a) and bool(a):
+        return True
+    if pd.notna(b) and bool(b):
+        return True
+    return a if pd.notna(a) else b
 
 
 class EventRepository:
@@ -319,16 +340,24 @@ class VoteRepository:
         self.storage.atomic_read_modify_write(VOTES_FILE, modify)
 
     def list_by_poll(self, evt: Event) -> List[VoteRecord]:
-        """List votes for a single poll."""
+        """List votes for a single poll.
+
+        When there are multiple historical columns for the same event (different title
+        generations), their votes are OR-aggregated before building VoteRecord objects.
+        """
         df = self.storage.read_parquet(VOTES_FILE)
-        col = evt.poll_string
-        if col not in df.columns:
-            matched = _find_matching_column(df, evt)
-            if matched:
-                col = matched
-            else:
-                return []
-        ser = df[col]
+        # Collect all columns: fuzzy matches (old title generations) + direct match
+        cols = _find_all_matching_columns(df, evt)
+        if not cols and evt.poll_string in df.columns:
+            cols = [evt.poll_string]
+        if not cols:
+            return []
+        if len(cols) == 1:
+            ser = df[cols[0]]
+        else:
+            ser = df[cols[0]].copy()
+            for col in cols[1:]:
+                ser = ser.combine(df[col], _or_merge_bool)
         all_sapeurs = {s.name: s for s in self.sapeur_repository.list_sapeurs()}
         list_vote = []
         for index in ser.index:
@@ -338,14 +367,26 @@ class VoteRepository:
         return list_vote
 
     def count_present(self, evt: Event) -> int:
-        """Count how many sapeurs voted True for a poll (no model construction)."""
+        """Count how many sapeurs voted True for a poll (no model construction).
+
+        When there are multiple historical columns for the same event (e.g. old suffixed
+        title generations), their votes are OR-aggregated: a sapeur counts as present if
+        they voted True in ANY of the matching columns.
+        """
         df = self.storage.read_parquet(VOTES_FILE)
-        col = evt.poll_string
-        if col not in df.columns:
-            col = _find_matching_column(df, evt)
-        if col is None or col not in df.columns:
+        # Collect all columns: direct match + any fuzzy matches (old title generations)
+        cols = _find_all_matching_columns(df, evt)
+        if not cols and evt.poll_string in df.columns:
+            cols = [evt.poll_string]
+        if not cols:
             return 0
-        return int(df[col].eq(True).sum())
+        if len(cols) == 1:
+            return int(df[cols[0]].eq(True).sum())
+        # OR-aggregate: True in any column wins
+        merged = df[cols[0]].copy()
+        for col in cols[1:]:
+            merged = merged.combine(df[col], _or_merge_bool)
+        return int(merged.eq(True).sum())
 
     def get_vote_df(self, event_list: Optional[List[Event]] = None, sapeur_list: Optional[List[Sapeur]] = None) -> pd.DataFrame:
         """Return the vote DataFrame, optionally filtered by events and/or sapeurs."""
