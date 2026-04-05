@@ -9,7 +9,7 @@ import holidays
 import pandas as pd  # type: ignore[import-untyped]
 
 from gardebot.common.logging_configuration import get_logger
-from gardebot.config import PREVENTION_DAY_BEFORE_HOLIDAY
+from gardebot.config import GENEVA_TZ, PREVENTION_DAY_BEFORE_HOLIDAY
 from gardebot.services.events import EventService
 from gardebot.services.message_service import MessageService
 from gardebot.services.onduty import OnDutyService
@@ -42,8 +42,11 @@ class Gardebot:
 
     def assign_on_duty_for_events(self) -> None:
         """Assign on-duty personnel for events ready for assignment (batch, fair)."""
+        now = pd.Timestamp.now(tz=GENEVA_TZ).tz_localize(None)
         event_list = [
-            event for event in self.event_service.list_events() if event.is_published() and not self.onduty_service.is_assigned(event)
+            event
+            for event in self.event_service.list_events()
+            if event.is_published() and not self.onduty_service.is_assigned(event) and event.start_date > now
         ]
         eligible_events = [event for event in event_list if self.vote_service.test_event_completion(event)]
         if not eligible_events:
@@ -91,7 +94,10 @@ class Gardebot:
     def reminders(self) -> None:
         """Send reminders for all polls that need it."""
         event_list = self.event_service.list_events()
+        now = pd.Timestamp.now(tz=GENEVA_TZ).tz_localize(None)
         for event in event_list:
+            if event.start_date <= now:
+                continue  # Never send reminders for past events
             if self.vote_service.test_headcount_reached(event):
                 continue
             if event.should_send_reminder() and not self.onduty_service.is_assigned(event):
