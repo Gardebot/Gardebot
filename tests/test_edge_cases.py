@@ -210,15 +210,9 @@ class TestShouldBePublishedPastEvents(unittest.TestCase):
         """An unpublished future event due for publication should return True."""
         from gardebot.adapters.polling import PollingAdapter
 
-        # Use a very old scheduled_publication_date by setting start_offset_days large enough
-        # that scheduled_publication_date (start - 21 days) is already in the past
-        future_event = _make_event(title="Upcoming Event", start_offset_days=25)
-        self.assertFalse(future_event.is_published())
-        # scheduled_publication_date = start - 21 days, which is ~4 days from now
-        # That's still in the future so should_be_published returns False
-        # Use start_offset_days=3 so pub date (start-21) is well in the past
+        # Use start_offset_days=3 so that scheduled_publication_date = start - 21 days
+        # = 3 - 21 = -18 days from now → already past → event is due for publication
         event_with_old_pub = _make_event(title="Upcoming Event", start_offset_days=3)
-        # This event's scheduled_publication_date is 3-21=-18 days from now → past → due
         self.assertFalse(event_with_old_pub.is_published())
 
         adapter = PollingAdapter.__new__(PollingAdapter)

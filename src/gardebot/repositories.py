@@ -26,6 +26,22 @@ def _clean_record(row: dict) -> dict:
     return {k: (None if (isinstance(v, float) and pd.isna(v)) else v) for k, v in row.items()}
 
 
+def _find_matching_column(df: pd.DataFrame, event: Event) -> Optional[str]:
+    """Find a column whose date+location suffix matches the event's poll_string suffix.
+
+    Matches on everything after ' : ' in the poll_string (the date and location part),
+    so 'Piquet de Pâques 5 : samedi 4 avril...' and 'Piquet de Pâques : samedi 4 avril...'
+    are considered matching.
+    """
+    if " : " not in event.poll_string:
+        return None
+    event_suffix = event.poll_string.split(" : ", 1)[1]
+    for col in df.columns:
+        if " : " in col and col.split(" : ", 1)[1] == event_suffix:
+            return col
+    return None
+
+
 class EventRepository:
     """CRUD operations for Event objects."""
 
@@ -307,7 +323,7 @@ class VoteRepository:
         df = self.storage.read_parquet(VOTES_FILE)
         col = evt.poll_string
         if col not in df.columns:
-            matched = self._find_matching_column(df, evt)
+            matched = _find_matching_column(df, evt)
             if matched:
                 col = matched
             else:
@@ -326,21 +342,10 @@ class VoteRepository:
         df = self.storage.read_parquet(VOTES_FILE)
         col = evt.poll_string
         if col not in df.columns:
-            col = self._find_matching_column(df, evt)
+            col = _find_matching_column(df, evt)
         if col is None or col not in df.columns:
             return 0
         return int(df[col].eq(True).sum())
-
-    @staticmethod
-    def _find_matching_column(df: pd.DataFrame, event: Event) -> Optional[str]:
-        """Find a column whose date+location suffix matches the event's poll_string suffix."""
-        if " : " not in event.poll_string:
-            return None
-        event_suffix = event.poll_string.split(" : ", 1)[1]
-        for col in df.columns:
-            if " : " in col and col.split(" : ", 1)[1] == event_suffix:
-                return col
-        return None
 
     def get_vote_df(self, event_list: Optional[List[Event]] = None, sapeur_list: Optional[List[Sapeur]] = None) -> pd.DataFrame:
         """Return the vote DataFrame, optionally filtered by events and/or sapeurs."""
@@ -414,22 +419,11 @@ class OnDutyRepository:
             return False
         col = event.poll_string
         if col not in df.columns:
-            col = self._find_matching_column(df, event)
+            col = _find_matching_column(df, event)
         if col is None or col not in df.columns:
             return False
         assigned_names = df.index[df[col].eq(True)].tolist()
         return len(assigned_names) >= event.headcount
-
-    @staticmethod
-    def _find_matching_column(df: pd.DataFrame, event: Event) -> Optional[str]:
-        """Find a column whose date+location suffix matches the event's poll_string suffix."""
-        if " : " not in event.poll_string:
-            return None
-        event_suffix = event.poll_string.split(" : ", 1)[1]
-        for col in df.columns:
-            if " : " in col and col.split(" : ", 1)[1] == event_suffix:
-                return col
-        return None
 
     def get_onduty_df(self, event_list: Optional[List[Event]] = None, sapeur_list: Optional[List[Sapeur]] = None) -> pd.DataFrame:
         """Return the OnDuty DataFrame, optionally filtered by events and/or sapeurs."""
